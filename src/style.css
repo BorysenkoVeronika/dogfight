@@ -1,0 +1,40 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background: #1a1a1a;
+  color: white;
+  font-family: Arial, sans-serif;
+}
+
+main {
+  padding: 24px;
+}
+
+h1 {
+  margin-bottom: 24px;
+}
+
+#hud {
+  display: flex;
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
+#hud p {
+  margin: 0;
+}
+
+#game {
+  display: block;
+  width: 100%;
+  max-width: 800px;
+  aspect-ratio: 8 / 5;
+  height: auto;
+  background: #252525;
+  border: 1px solid #555;
+}
