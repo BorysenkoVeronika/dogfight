@@ -1,7 +1,7 @@
 import './style.css'
 import { createLoop } from './loop.js'
 import { createInput } from './input.js'
-import { createShip, integrate } from './sim/ship.js'
+import { Ship } from './sim/ship.js'
 import { wrap } from './sim/arena.js'
 import { createCanvas } from './render/canvas.js'
 import { drawShip, drawStars, drawHud } from './render/draw.js'
@@ -13,7 +13,7 @@ document.querySelector('#app').innerHTML = `
   </main>
 `
 const input = createInput(window)
-let ship = createShip(400, 250)
+let ship = new Ship(400, 250)
 
 const canvas = document.querySelector('#game')
 const { ctx } = createCanvas(canvas)
@@ -25,8 +25,8 @@ const loop = createLoop({
   simulate(dt) {
     previousShip = { ...ship }
 
-    ship = integrate(ship, input, dt)
-    ship = wrap(ship, canvas.clientWidth, canvas.clientHeight)
+    ship.update(dt, input)
+    wrap(ship, canvas.clientWidth, canvas.clientHeight)
 
     input.endFrame()
   },
@@ -39,15 +39,15 @@ render(alpha, stats) {
     drawStars(ctx, width, height)
 
     const interpolatedShip = {
-        ...ship,
-        x: previousShip.x + (ship.x - previousShip.x) * alpha,
-        y: previousShip.y + (ship.y - previousShip.y) * alpha,
-        angle:
-            previousShip.angle +
-           Math.atan2(
-                Math.sin(ship.angle - previousShip.angle),
-                Math.cos(ship.angle - previousShip.angle)
-           ) * alpha,
+    ...ship,
+    x: previousShip.pos.x + (ship.pos.x - previousShip.pos.x) * alpha,
+    y: previousShip.pos.y + (ship.pos.y - previousShip.pos.y) * alpha,
+    angle:
+        previousShip.angle +
+        Math.atan2(
+            Math.sin(ship.angle - previousShip.angle),
+            Math.cos(ship.angle - previousShip.angle)
+        ) * alpha,
     }
 
     drawShip(ctx, interpolatedShip)

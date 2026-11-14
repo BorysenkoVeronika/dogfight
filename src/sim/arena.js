@@ -1,7 +1,10 @@
-export function wrap(ship, width, height) {
-    return {
-        ...ship,
-        x: ((ship.x % width) + width) % width,
-        y: ((ship.y % height) + height) % height,
-    };
+import { Vector2 } from './vector.js';
+
+export function wrap(entity, width, height) {
+    entity.pos = new Vector2(
+        ((entity.pos.x % width) + width) % width,
+        ((entity.pos.y % height) + height) % height
+    );
+
+    return entity;
 }

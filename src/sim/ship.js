@@ -1,56 +1,48 @@
-export function createShip(x = 400, y = 250) {
-    return {
-        x,
-        y,
-        vx: 0,
-        vy: 0,
-        angle: 0,
-        thrust: false,
-    };
-}
+import { Entity } from './entity.js';
+import { Vector2 } from './vector.js';
 
-export function integrate(ship, input, dt) {
-    const rotationSpeed = 3;
-    const acceleration = 200;
-    const drag = 0.99;
-    const maxSpeed = 300;
+export class Ship extends Entity {
+    constructor(x = 400, y = 250) {
+        super({
+            pos: new Vector2(x, y),
+            vel: new Vector2(),
+            angle: 0,
+            radius: 12,
+            kind: 'ship',
+        });
 
-    let angle = ship.angle;
-
-    if (input.isDown('ArrowLeft')) {
-        angle -= rotationSpeed * dt;
+        this.thrust = false;
     }
 
-    if (input.isDown('ArrowRight')) {
-        angle += rotationSpeed * dt;
+    update(dt, input) {
+        const rotationSpeed = 3;
+        const acceleration = 200;
+        const drag = 0.99;
+        const maxSpeed = 300;
+
+        if (input.isDown('ArrowLeft')) {
+            this.angle -= rotationSpeed * dt;
+        }
+
+        if (input.isDown('ArrowRight')) {
+            this.angle += rotationSpeed * dt;
+        }
+
+        this.thrust = input.isDown('ArrowUp');
+
+        if (this.thrust) {
+            const direction = Vector2.fromAngle(this.angle);
+            this.vel = this.vel.add(direction.scale(acceleration * dt));
+        }
+
+        this.vel = this.vel.scale(Math.pow(drag, dt * 60));
+
+        const speed = this.vel.length();
+
+        if (speed > maxSpeed) {
+            this.vel = this.vel.normalize().scale(maxSpeed);
+        }
+
+        super.update(dt);
     }
-
-    const thrust = input.isDown('ArrowUp');
-
-    let vx = ship.vx;
-    let vy = ship.vy;
-
-    if (thrust) {
-        vx += Math.cos(angle) * acceleration * dt;
-        vy += Math.sin(angle) * acceleration * dt;
-    }
-
-    vx *= Math.pow(drag, dt * 60);
-    vy *= Math.pow(drag, dt * 60);
-
-    const speed = Math.hypot(vx, vy);
-
-    if (speed > maxSpeed) {
-        vx = (vx / speed) * maxSpeed;
-        vy = (vy / speed) * maxSpeed;
-    }
-
-    return {
-        x: ship.x + vx * dt,
-        y: ship.y + vy * dt,
-        vx,
-        vy,
-        angle,
-        thrust,
-    };
 }
