@@ -39,15 +39,89 @@ export function drawStars(ctx, width, height) {
     }
 }
 
-export function drawHud(ctx, stats) {
+export function drawHud(ctx, stats, score) {
     ctx.save();
 
     ctx.fillStyle = '#ffffff';
-    ctx.font = '14px Arial';
+    ctx.font = '16px monospace';
+    ctx.fillText(`FPS: ${stats.fps}`, 10, 20);
+    ctx.fillText(`Frame: ${(stats.frameDuration ?? 0).toFixed(1)} ms`, 10, 40);
+    ctx.fillText(`Score: ${score}`, 10, 60);
 
-    ctx.fillText(`Steps/s: ${stats.stepsPerSecond.toFixed(0)}`, 10, 20);
-    ctx.fillText(`Frames/s: ${stats.framesPerSecond.toFixed(0)}`, 10, 40);
-    ctx.fillText(`Frame duration: ${stats.lastFrameDuration.toFixed(2)} ms`, 10, 60);
+    ctx.restore();
+}
+
+export function drawBullet(ctx, bullet) {
+    ctx.save();
+
+    ctx.fillStyle = '#ffff00';
+    ctx.beginPath();
+    ctx.arc(bullet.pos.x, bullet.pos.y, bullet.radius, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+}
+
+
+export function drawAsteroid(ctx, asteroid) {
+    ctx.save();
+
+    ctx.strokeStyle = '#aaaaaa';
+    ctx.lineWidth = 2;
+
+    ctx.beginPath();
+    ctx.arc(
+        asteroid.pos.x,
+        asteroid.pos.y,
+        asteroid.radius,
+        0,
+        Math.PI * 2
+    );
+    ctx.stroke();
+
+    ctx.restore();
+}
+
+export function drawExplosion(ctx, explosion) {
+    for (const particle of explosion.particles) {
+        const alpha = particle.ttl / particle.maxTtl;
+
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = '#ff9933';
+
+        ctx.beginPath();
+        ctx.arc(
+            particle.pos.x,
+            particle.pos.y,
+            2,
+            0,
+            Math.PI * 2
+        );
+
+        ctx.fill();
+        ctx.restore();
+    }
+}
+
+export function drawPickup(ctx, pickup) {
+    ctx.save();
+
+    ctx.fillStyle = pickup.type === 'shield' ? '#3498db' : '#f1c40f';
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2;
+
+    ctx.beginPath();
+    ctx.arc(
+        pickup.pos.x,
+        pickup.pos.y,
+        pickup.radius,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+    ctx.stroke();
 
     ctx.restore();
 }

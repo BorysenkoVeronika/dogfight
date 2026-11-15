@@ -1,7 +1,12 @@
 import { Entity } from './entity.js';
 import { Vector2 } from './vector.js';
+import { Bullet } from './bullet.js';
 
 export class Ship extends Entity {
+
+    #hp = 3;
+    #damageCooldown = 0;
+
     constructor(x = 400, y = 250) {
         super({
             pos: new Vector2(x, y),
@@ -12,6 +17,9 @@ export class Ship extends Entity {
         });
 
         this.thrust = false;
+        this.shieldTime = 0;
+        this.rapidFireTime = 0;
+        this.fireCooldown = 0;
     }
 
     update(dt, input) {
@@ -19,6 +27,22 @@ export class Ship extends Entity {
         const acceleration = 200;
         const drag = 0.99;
         const maxSpeed = 300;
+
+        if (this.#damageCooldown > 0) {
+            this.#damageCooldown -= dt;
+        }
+
+        if (this.shieldTime > 0) {
+            this.shieldTime -= dt;
+        }
+
+        if (this.rapidFireTime > 0) {
+            this.rapidFireTime -= dt;
+        }
+
+        if (this.fireCooldown > 0) {
+            this.fireCooldown -= dt;
+        }
 
         if (input.isDown('ArrowLeft')) {
             this.angle -= rotationSpeed * dt;
@@ -44,5 +68,52 @@ export class Ship extends Entity {
         }
 
         super.update(dt);
+    }
+
+    get hp() {
+        return this.#hp;
+    }
+
+    takeDamage(amount) {
+
+        if (this.shieldTime > 0) return;
+
+        if (this.#damageCooldown > 0) return;
+
+        this.#hp = Math.max(0, this.#hp - amount);
+        this.#damageCooldown = 1;
+
+        if (this.#hp === 0) {
+            this.alive = false;
+        }
+    }
+
+    applyPickup(type) {
+        if (type === 'shield') {
+            this.shieldTime = 5;
+        }
+
+        if (type === 'rapid-fire') {
+            this.rapidFireTime = 5;
+        }
+    }
+
+    fire(world) {
+        if (this.fireCooldown > 0) return;
+
+        const direction = Vector2.fromAngle(this.angle);
+        const bulletPosition = this.pos.add(
+            direction.scale(this.radius + 3)
+        );
+
+        const bulletVelocity = this.vel.add(
+            direction.scale(500)
+        );
+
+        const bullet = new Bullet(bulletPosition, bulletVelocity);
+
+        world.spawn(bullet);
+
+        this.fireCooldown = this.rapidFireTime > 0 ? 0.12 : 0.3;
     }
 }
