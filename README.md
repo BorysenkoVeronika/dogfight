@@ -77,7 +77,7 @@ The ship uses acceleration of `200`, rotation speed of `3` radians per second, d
 
 ### M4 — Experiments
 #### Experiment 1 — Blocking the Main Thread
-****Setup:**** Added a synchronous busy-wait of 100 ms every 60 frames inside the render function.
+**Setup:** Added a synchronous busy-wait of 100 ms every 60 frames inside the render function.
 
 **Observations:**
 
@@ -236,3 +236,392 @@ With inheritance, each behavior could require additional subclasses, such as `Ho
 
 Composition keeps behaviors independent and allows them to be attached to different entities. This makes the system more flexible, reusable, and easier to extend.
 
+## Lab 03 — Asynchronous JavaScript
+### M1 — Asset Pipeline and Loading Screen
+#### Asset Manifest
+Created `src/assets/manifest.json` to define the game's sprites, sounds and arena configuration.
+
+#### Asset Loader
+Implemented `src/assets/loader.js` with the following functions:
+
+- `fetchJson()` checks the HTTP response status and throws an error when the request fails.
+
+- `loadJson()` loads JSON resources.
+
+- `loadImage()` loads images with `new Image()` and handles load, error and abort events.
+
+- `loadAudio()` fetches audio files and decodes them using Web Audio.
+
+- `withRetry()` retries transient failures using exponential backoff and jitter, without retrying HTTP 4xx errors.
+
+- `loadAll()` loads all manifest resources concurrently using `Promise.all()`.
+
+All loading functions support `AbortSignal` where applicable.
+
+#### Loading Screen
+- Added a loading screen rendered directly on the Canvas.
+
+- Implemented a progress bar based on completed assets.
+
+- The game starts only after `loadAll()` completes successfully.
+
+- Added a cancellation button using `AbortController`.
+
+- Added a retry button for failed or cancelled loading attempts.
+
+- Aborted pending requests when loading fails or is cancelled.
+
+#### Tests and Results
+**Concurrent loading**
+
+Tested `loadAll()` with three simulated resources, each taking approximately 200 ms.
+
+- Maximum simultaneous requests: 3.
+
+- All three resources completed successfully.
+
+- Progress callbacks reported 0%, 33%, 67% and 100%.
+
+**Retry and error handling**
+
+- Simulated temporary HTTP 500 failures.
+
+- Confirmed that the loader retries and succeeds on the third attempt.
+
+- Confirmed that HTTP 404 errors are not retried.
+
+- Verified that failed loading displays the retry button.
+
+**Cancellation**
+
+- Tested cancellation using `AbortController`.
+
+- Confirmed that the request rejects with `AbortError`.
+
+- Tested cancellation through the loading screen.
+
+- Confirmed that the game does not start after cancellation and that the retry option appears.
+
+**Sequential vs. concurrent execution**
+
+Compared three simulated asynchronous operations, each taking approximately 200 ms.
+
+| Execution method | Measured time |
+|---|---:|
+| Sequential (`fetchJson`) | 623 ms |
+| Concurrent (`Promise.all`) | 212 ms |
+
+The test used three independent JSON requests with an artificial 200 ms delay per request. Concurrent execution completed approximately 2.9 times faster than sequential execution.
+
+**Conclusion**
+
+`Promise.all()` allows independent asynchronous operations to run concurrently instead of waiting for each operation to finish before starting the next one. The asset loader uses this approach to reduce total loading time while reporting progress and handling failures.
+
+### M2 — Sprites, Sound, and Events
+
+Ships, bullets, and asteroids render using the loaded sprite sheet. The `audio.js` module manages `AudioContext`, plays decoded buffers for shooting, hits, and explosions, and unlocks audio after a click or key press during gameplay. The simulation emits `fired`, `hit`, and `exploded` events; the audio module subscribes without being imported by the simulation. `hud.js` listens for score updates.
+
+### M3 — Lobby over HTTP
+
+The lobby fetches the room list from `/api/rooms.json`, lets the player enter a name and select a room, then starts the local game using the selected room's arena. `Lobby extends EventTarget`, while `lobby-ui.js` handles the DOM. The lobby refreshes every 5 seconds, uses `AbortSignal.timeout(5000)` for each room request, and aborts pending requests on leaving. Joining a room was tested successfully.
+
+### M4 — Failure Gallery
+
+| Failure | Test and observed result | Recovery |
+|---|---|---|
+| Missing sprite (HTTP 404) | Changed a sprite path to a nonexistent file. The loading screen displayed `Falha ao carregar os recursos. Tente novamente.` and the retry button. HTTP 404 is not retried by `withRetry()`. | Restored the path; the game loaded normally. |
+| Network timeout (simulated) | A simulated `TimeoutError: Network timeout` caused `withRetry()` to make 3 attempts before rejecting. A separate temporary `TimeoutError` thrown at the start of `loadAll()` displayed the loading error and retry button. | Removed the temporary throw; the game loaded normally. |
+| Abort mid-load | Under Slow 3G, clicked `Cancelar carregamento`. The screen displayed `Carregamento cancelado.` and the retry button. | Restored No throttling and clicked `Tentar novamente`; the game loaded without refreshing the page. |
+| Corrupt JSON | Temporarily added a trailing comma to `arena.json`. JSON parsing failed and the loading screen displayed the error message. A separate invalid-JSON test returned `SyntaxError`. | Restored valid JSON; the game loaded normally. |
+
+The timeout tests used simulated exceptions, **not a real stalled network request**. The asset loader retries thrown timeout errors but does not impose its own request deadline; the 5-second timeout in `lobby.js` applies to room-list requests.
+
+### M4 — Microtasks and Tasks
+This milestone explores JavaScript's event loop and the execution order of synchronous code, microtasks and tasks.
+
+#### Challenge 1 — Synchronous Code, Promises and queueMicrotask
+**Code:**
+
+```javascript
+
+console.log('A')
+
+setTimeout(() => {
+
+    console.log('B')
+
+}, 0)
+
+Promise.resolve().then(() => {
+
+    console.log('C')
+
+})
+
+queueMicrotask(() => {
+
+    console.log('D')
+
+})
+
+console.log('E')
+
+```
+
+**Observed output:**
+
+```text
+
+A → E → C → D → B
+
+```
+
+**Explanation:**
+
+- A and E execute synchronously.
+
+- C and D are microtasks.
+
+- B is a task scheduled by setTimeout.
+
+- Microtasks execute before the next task.
+
+#### Challenge 2 — Nested Promises and setTimeout
+**Code:**
+
+```javascript
+
+console.log('A')
+
+Promise.resolve().then(() => {
+
+    console.log('B')
+
+    setTimeout(() => {
+
+        console.log('C')
+
+    }, 0)
+
+    Promise.resolve().then(() => {
+
+        console.log('D')
+
+    })
+
+})
+
+setTimeout(() => {
+
+    console.log('E')
+
+}, 0)
+
+console.log('F')
+
+```
+
+**Observed output:**
+
+```text
+
+A → F → B → D → E → C
+
+```
+
+**Explanation:**
+
+- A and F execute synchronously.
+
+- B executes as a Promise microtask.
+
+- During B, two callbacks are scheduled: C as a task and D as a microtask.
+
+- D executes before the next task.
+
+- E executes before C because its timer was scheduled first.
+
+#### Challenge 3 — async/await
+**Code:**
+
+```javascript
+
+async function teste() {
+
+    console.log('B')
+
+    await Promise.resolve()
+
+    console.log('D')
+
+}
+
+console.log('A')
+
+teste()
+
+console.log('C')
+
+setTimeout(() => {
+
+    console.log('E')
+
+}, 0)
+
+```
+
+**Observed output:**
+
+```text
+
+A → B → C → D → E
+
+```
+
+**Explanation:**
+
+- A executes synchronously.
+
+- B executes immediately when the async function is called.
+
+- C executes before the async function resumes.
+
+- D executes as a microtask after the await.
+
+- E executes as a task scheduled by setTimeout.
+
+#### Challenge 4 — requestAnimationFrame and Promises
+**Code:**
+
+```javascript
+
+console.log('A')
+
+requestAnimationFrame(() => {
+
+    console.log('B')
+
+    Promise.resolve().then(() => {
+
+        console.log('C')
+
+    })
+
+})
+
+setTimeout(() => {
+
+    console.log('D')
+
+}, 0)
+
+Promise.resolve().then(() => {
+
+    console.log('E')
+
+})
+
+console.log('F')
+
+```
+
+**Observed output:**
+
+```text
+
+A → F → E → D → B → C
+
+```
+
+**Explanation:**
+
+- A and F execute synchronously.
+
+- E executes as a microtask.
+
+- D executes through setTimeout.
+
+- B executes during a requestAnimationFrame callback before a browser repaint.
+
+- C executes as a microtask created inside the animation frame callback.
+
+The relative order of requestAnimationFrame and setTimeout callbacks can vary depending on browser scheduling. The sequence above is the one observed during this experiment.
+
+#### Challenge 5 — Combined Async Execution
+**Code:**
+
+```javascript
+
+console.log('A')
+
+setTimeout(() => {
+
+    console.log('B')
+
+    Promise.resolve().then(() => {
+
+        console.log('C')
+
+    })
+
+}, 0)
+
+Promise.resolve().then(async () => {
+
+    console.log('D')
+
+    await null
+
+    console.log('E')
+
+})
+
+queueMicrotask(() => {
+
+    console.log('F')
+
+})
+
+console.log('G')
+
+```
+
+**Observed output:**
+
+```text
+
+A → G → D → F → E → B → C
+
+```
+
+**Explanation:**
+
+- A and G execute synchronously.
+
+- D executes as the first microtask.
+
+- F executes as the next microtask.
+
+- E executes when the async function resumes after await.
+
+- B executes as a task scheduled by setTimeout.
+
+- C executes as a microtask created inside the setTimeout callback.
+
+#### Conclusion
+These experiments demonstrate the difference between synchronous execution, microtasks and tasks.
+
+Promises, async/await and queueMicrotask use the microtask queue, while setTimeout schedules tasks. requestAnimationFrame schedules callbacks associated with the browser's rendering cycle.
+
+Understanding this execution order is important when working with asynchronous operations, animations and game loops.
+
+## Technologies
+- JavaScript (ES Modules)
+
+- HTML5 Canvas
+
+- Vite
+
+- ESLint
+
+- Prettier
