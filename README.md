@@ -36,36 +36,48 @@ The project explores JavaScript fundamentals, the event loop, fixed-timestep sim
 
 - **Space:** Fire.
 
+
 ## Project Structure
+
 ```text
-
-src/
-
-  main.js
-
-  loop.js
-
-  input.js
-
-  assets/
-
-    manifest.json
-
-    arena.json
-
-    loader.js
-
-  sim/
-
-    ...
-
-  render/
-
-    canvas.js
-
-    draw.js
-
+dogfight/
+└── src/
+    ├── assets/
+    │   ├── arena.json
+    │   ├── explosion.wav
+    │   ├── hit.wav
+    │   ├── loader.js
+    │   ├── manifest.json
+    │   ├── shoot.wav
+    │   └── sprites.svg
+    ├── render/
+    │   ├── canvas.js
+    │   └── draw.js
+    ├── sim/
+    │   ├── behaviors/
+    │   │   └── homing.js
+    │   ├── arena.js
+    │   ├── asteroid.js
+    │   ├── bullet.js
+    │   ├── collision.js
+    │   ├── entity.js
+    │   ├── explosion.js
+    │   ├── pickup.js
+    │   ├── ship.js
+    │   ├── vector.js
+    │   └── world.js
+    ├── audio.js
+    ├── counter.js
+    ├── events.js
+    ├── hud.js
+    ├── input.js
+    ├── lobby-ui.js
+    ├── lobby.js
+    ├── loop.js
+    ├── main.js
+    └── style.css
 ```
+
 
 ## Lab 01 — JavaScript Fundamentals
 ### Overview
@@ -227,9 +239,9 @@ Pickups are implemented as independent `Entity` objects. They have their own typ
 
 Two pickup types were implemented:
 
-- ****Shield:**** prevents damage for 5 seconds.
+- **Shield:** prevents damage for 5 seconds.
 
-- ****Rapid Fire:**** reduces the shooting cooldown for 5 seconds.
+- **Rapid Fire:** reduces the shooting cooldown for 5 seconds.
 
 #### Design comparison
 With inheritance, each behavior could require additional subclasses, such as `HomingAsteroid`, `HomingBullet`, or specialized pickup classes. This can lead to a rigid and increasingly complex class hierarchy.
