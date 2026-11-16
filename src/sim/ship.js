@@ -1,6 +1,7 @@
 import { Entity } from './entity.js';
 import { Vector2 } from './vector.js';
 import { Bullet } from './bullet.js';
+import { gameEvents } from '../events.js'
 
 export class Ship extends Entity {
 
@@ -113,6 +114,7 @@ export class Ship extends Entity {
         const bullet = new Bullet(bulletPosition, bulletVelocity);
 
         world.spawn(bullet);
+        gameEvents.dispatchEvent(new Event('fired'))
 
         this.fireCooldown = this.rapidFireTime > 0 ? 0.12 : 0.3;
     }

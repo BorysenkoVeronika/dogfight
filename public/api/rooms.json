@@ -1,0 +1,22 @@
+{
+    "rooms": [
+        {
+            "id": "room-1",
+            "name": "Sala de treinamento",
+            "arena": {
+                "name": "Arena padrão",
+                "width": 800,
+                "height": 500
+            }
+        },
+        {
+            "id": "room-2",
+            "name": "Sala alternativa",
+            "arena": {
+                "name": "Arena ampla",
+                "width": 1000,
+                "height": 600
+            }
+        }
+    ]
+}

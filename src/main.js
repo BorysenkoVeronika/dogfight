@@ -1,4 +1,6 @@
 import './style.css'
+import manifest from './assets/manifest.json'
+import { loadAll } from './assets/loader.js'
 import { createLoop } from './loop.js'
 import { createInput } from './input.js'
 import { Ship } from './sim/ship.js'
@@ -8,6 +10,10 @@ import { World } from './sim/world.js'
 import { Asteroid } from './sim/asteroid.js'
 import { Vector2 } from './sim/vector.js'
 import { Pickup } from './sim/pickup.js'
+import { createAudio } from './audio.js'
+import { createHud } from './hud.js'
+import { Lobby } from './lobby.js'
+import { createLobbyUI } from './lobby-ui.js'
 import {
   drawShip,
   drawStars,
@@ -21,123 +27,255 @@ import {
 document.querySelector('#app').innerHTML = `
   <main>
     <h1>Dogfight</h1>
-    <canvas id="game"></canvas>
+
+    <section id="lobby"></section>
+
+    <div id="loading-controls" hidden>
+      <p id="loading-status">Preparando recursos...</p>
+      <button id="cancel-button">Cancelar carregamento</button>
+      <button id="retry-button" hidden>Tentar novamente</button>
+    </div>
+
+    <canvas id="game" hidden></canvas>
   </main>
 `
-const input = createInput(window)
-const world = new World()
-
-let ship = world.spawn(new Ship(400, 250))
-let respawnTimer = null
 
 const canvas = document.querySelector('#game')
-const { ctx } = createCanvas(canvas)
+const { ctx, resize } = createCanvas(canvas)
+const audio = createAudio()
 
-const asteroid = world.spawn(
-  new Asteroid(
-    new Vector2(200, 150),
-    new Vector2(60, 40),
-    25,
-    canvas.clientWidth,
-    canvas.clientHeight
+const lobbyElement = document.querySelector('#lobby')
+const lobby = new Lobby()
+let selectedRoom = null
+
+createLobbyUI(lobby, lobbyElement, ({ playerName, room }) => {
+  selectedRoom = room
+  lobby.stop()
+  lobbyElement.hidden = true
+  canvas.hidden = false
+  canvas.style.aspectRatio = `${room.arena.width} / ${room.arena.height}`
+  resize()
+  loadingControls.hidden = false
+  loadGame(room)
+})
+
+lobby.start()
+
+const loadingControls = document.querySelector('#loading-controls')
+const loadingStatus = document.querySelector('#loading-status')
+const retryButton = document.querySelector('#retry-button')
+const cancelButton = document.querySelector('#cancel-button')
+
+let loadingController = null
+
+function drawLoadingScreen(progress) {
+  const width = canvas.clientWidth
+  const height = canvas.clientHeight
+
+  ctx.clearRect(0, 0, width, height)
+  ctx.fillStyle = '#252525'
+  ctx.fillRect(0, 0, width, height)
+
+  ctx.textAlign = 'center'
+  ctx.fillStyle = '#ffffff'
+  ctx.font = '20px Arial'
+  ctx.fillText('Carregando Dogfight...', width / 2, height / 2 - 35)
+
+  const barWidth = Math.min(320, width - 48)
+  const barHeight = 14
+  const x = (width - barWidth) / 2
+  const y = height / 2
+
+  ctx.fillStyle = '#555555'
+  ctx.fillRect(x, y, barWidth, barHeight)
+
+  ctx.fillStyle = '#3498db'
+  ctx.fillRect(x, y, barWidth * progress, barHeight)
+
+  ctx.font = '14px Arial'
+  ctx.fillStyle = '#ffffff'
+  ctx.fillText(`${Math.round(progress * 100)}%`, width / 2, y + 35)
+}
+
+function startGame(assets) {
+  loadingControls.hidden = true
+
+  const input = createInput(window)
+  window.addEventListener('keydown', audio.unlock)
+  window.addEventListener('click', audio.unlock)
+
+  const world = new World()
+  const hud = createHud()
+
+  let ship = world.spawn(new Ship(400, 250))
+  let respawnTimer = null
+
+  const asteroid = world.spawn(
+    new Asteroid(
+      new Vector2(200, 150),
+      new Vector2(60, 40),
+      25,
+      canvas.clientWidth,
+      canvas.clientHeight
+    )
   )
-);
 
-asteroid.homing = {
-  targetId: ship.id,
-  turnRate: 1.5
-};
+  asteroid.homing = {
+    targetId: ship.id,
+    turnRate: 1.5
+  }
 
-world.spawn(new Pickup(300, 200, 'shield'));
-world.spawn(new Pickup(500, 350, 'rapid-fire'));
+  world.spawn(new Pickup(300, 200, 'shield'))
+  world.spawn(new Pickup(500, 350, 'rapid-fire'))
 
-let previousShip = { ...ship }
+  let previousShip = { ...ship }
 
+  const loop = createLoop({
+    simulate(dt) {
+      previousShip = { ...ship }
 
-const loop = createLoop({
+      if (input.isDown('Space')) {
+        ship.fire(world)
+      }
 
-  simulate(dt) {
-    previousShip = { ...ship }
+      world.step(dt, input)
 
-    if (input.isDown('Space')) {
-      ship.fire(world);
-    }
+      if (!ship.alive && respawnTimer === null) {
+        respawnTimer = 2
+      }
 
-    world.step(dt, input)
+      if (respawnTimer !== null) {
+        respawnTimer -= dt
 
-    if (!ship.alive && respawnTimer === null) {
-      respawnTimer = 2;
-    }
+        if (respawnTimer <= 0) {
+          for (let attempt = 0; attempt < 100; attempt++) {
+            const x = ship.radius + Math.random() * (canvas.clientWidth - ship.radius * 2)
+            const y = ship.radius + Math.random() * (canvas.clientHeight - ship.radius * 2)
 
-    if (respawnTimer !== null) {
-      respawnTimer -= dt;
+            const safe = [...world.ofKind('asteroid')].every(asteroid => {
+              const dx = x - asteroid.pos.x
+              const dy = y - asteroid.pos.y
+              const minDistance = ship.radius + asteroid.radius + 30
 
-      if (respawnTimer <= 0) {
-        for (let attempt = 0; attempt < 100; attempt++) {
-          const x = ship.radius + Math.random() * (canvas.clientWidth - ship.radius * 2);
-          const y = ship.radius + Math.random() * (canvas.clientHeight - ship.radius * 2);
+              return dx * dx + dy * dy > minDistance * minDistance
+            })
 
-          const safe = [...world.ofKind('asteroid')].every(asteroid => {
-            const dx = x - asteroid.pos.x;
-            const dy = y - asteroid.pos.y;
-            const minDistance = ship.radius + asteroid.radius + 30;
-
-            return dx * dx + dy * dy > minDistance * minDistance;
-          });
-
-          if (safe) {
-            ship = world.spawn(new Ship(x, y));
-            respawnTimer = null;
-            break;
+            if (safe) {
+              ship = world.spawn(new Ship(x, y))
+              respawnTimer = null
+              break
+            }
           }
         }
       }
+
+      wrap(ship, canvas.clientWidth, canvas.clientHeight)
+      input.endFrame()
+    },
+
+    render(alpha, stats) {
+      const width = canvas.clientWidth
+      const height = canvas.clientHeight
+
+      ctx.clearRect(0, 0, width, height)
+      drawStars(ctx, width, height)
+
+      const interpolatedShip = {
+        ...ship,
+        x: previousShip.pos.x + (ship.pos.x - previousShip.pos.x) * alpha,
+        y: previousShip.pos.y + (ship.pos.y - previousShip.pos.y) * alpha,
+        angle:
+          previousShip.angle +
+          Math.atan2(
+            Math.sin(ship.angle - previousShip.angle),
+            Math.cos(ship.angle - previousShip.angle)
+          ) * alpha,
+      }
+
+      drawShip(ctx, interpolatedShip, assets.sprites.game);
+
+      for (const bullet of world.ofKind('bullet')) {
+        drawBullet(ctx, bullet, assets.sprites.game);
+      }
+
+      for (const asteroid of world.ofKind('asteroid')) {
+        drawAsteroid(ctx, asteroid, assets.sprites.game);
+      }
+
+      for (const pickup of world.ofKind('pickup')) {
+        drawPickup(ctx, pickup)
+      }
+
+      for (const explosion of world.ofKind('explosion')) {
+        drawExplosion(ctx, explosion)
+      }
+
+      drawHud(ctx, stats, hud.score)
+    },
+  })
+
+  loop.start()
+}
+
+async function loadGame(room) {
+  retryButton.hidden = true
+  cancelButton.hidden = false
+  loadingStatus.textContent = 'Carregando recursos...'
+
+  const controller = new AbortController()
+  loadingController = controller
+
+  drawLoadingScreen(0)
+
+  try {
+    const assetManifest = {
+      ...manifest,
+      arena: new URL('./assets/arena.json', import.meta.url).href
     }
 
-    wrap(ship, canvas.clientWidth, canvas.clientHeight)
+    const assets = await loadAll(assetManifest, {
+      ctx: audio.ctx,
+      signal: controller.signal,
+      onProgress(progress, completed, total) {
+        drawLoadingScreen(progress)
+        loadingStatus.textContent =
+          `Carregando recursos: ${completed}/${total}`
+      }
+    })
 
-    input.endFrame()
-  },
+    assets.arena = room.arena
 
-  render(alpha, stats) {
-    const width = canvas.clientWidth
-    const height = canvas.clientHeight
+    audio.setSounds(assets.sounds)
 
-    ctx.clearRect(0, 0, width, height)
-    drawStars(ctx, width, height)
+    cancelButton.hidden = true
+    loadingController = null
 
-    const interpolatedShip = {
-      ...ship,
-      x: previousShip.pos.x + (ship.pos.x - previousShip.pos.x) * alpha,
-      y: previousShip.pos.y + (ship.pos.y - previousShip.pos.y) * alpha,
-      angle:
-        previousShip.angle +
-        Math.atan2(
-          Math.sin(ship.angle - previousShip.angle),
-          Math.cos(ship.angle - previousShip.angle)
-        ) * alpha,
+    startGame(assets)
+  } catch (error) {
+    controller.abort()
+
+    if (loadingController === controller) {
+      loadingController = null
     }
 
-    drawShip(ctx, interpolatedShip)
+    console.error('Erro ao carregar recursos:', error)
 
-    for (const bullet of world.ofKind('bullet')) {
-      drawBullet(ctx, bullet)
+    cancelButton.hidden = true
+
+    if (error.name === 'AbortError') {
+      loadingStatus.textContent = 'Carregamento cancelado.'
+    } else {
+      loadingStatus.textContent =
+        'Falha ao carregar os recursos. Tente novamente.'
     }
 
-    for (const asteroid of world.ofKind('asteroid')) {
-      drawAsteroid(ctx, asteroid)
-    }
+    retryButton.hidden = false
+  }
+}
 
-    for (const pickup of world.ofKind('pickup')) {
-      drawPickup(ctx, pickup);
-    }
-
-    for (const explosion of world.ofKind('explosion')) {
-      drawExplosion(ctx, explosion)
-    }
-
-    drawHud(ctx, stats, world.score)
-  },
+cancelButton.addEventListener('click', () => {
+  loadingStatus.textContent = 'Cancelando carregamento...'
+  loadingController?.abort()
 })
 
-loop.start()
+retryButton.addEventListener('click', () => loadGame(selectedRoom))

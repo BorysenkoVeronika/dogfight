@@ -1,28 +1,10 @@
-export function drawShip(ctx, ship) {
+export function drawShip(ctx, ship, sprite) {
     ctx.save();
-
     ctx.translate(ship.x, ship.y);
-    ctx.rotate(ship.angle);
+    ctx.rotate(ship.angle + Math.PI / 2);
 
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 2;
-
-    ctx.beginPath();
-    ctx.moveTo(15, 0);
-    ctx.lineTo(-10, -10);
-    ctx.lineTo(-5, 0);
-    ctx.lineTo(-10, 10);
-    ctx.closePath();
-    ctx.stroke();
-
-    if (ship.thrust) {
-        ctx.strokeStyle = '#ff9900';
-
-        ctx.beginPath();
-        ctx.moveTo(-7, -4);
-        ctx.lineTo(-17, 0);
-        ctx.lineTo(-7, 4);
-        ctx.stroke();
+    if (sprite) {
+        ctx.drawImage(sprite, 0, 0, 64, 64, -ship.radius, -ship.radius, ship.radius * 2, ship.radius * 2);
     }
 
     ctx.restore();
@@ -39,45 +21,42 @@ export function drawStars(ctx, width, height) {
     }
 }
 
+
 export function drawHud(ctx, stats, score) {
     ctx.save();
 
     ctx.fillStyle = '#ffffff';
     ctx.font = '16px monospace';
-    ctx.fillText(`FPS: ${stats.fps}`, 10, 20);
-    ctx.fillText(`Frame: ${(stats.frameDuration ?? 0).toFixed(1)} ms`, 10, 40);
+    ctx.fillText(`FPS: ${stats.framesPerSecond.toFixed(0)}`, 10, 20);
+    ctx.fillText(`Frame: ${stats.lastFrameDuration.toFixed(1)} ms`, 10, 40);
     ctx.fillText(`Score: ${score}`, 10, 60);
 
     ctx.restore();
 }
 
-export function drawBullet(ctx, bullet) {
-    ctx.save();
 
-    ctx.fillStyle = '#ffff00';
-    ctx.beginPath();
-    ctx.arc(bullet.pos.x, bullet.pos.y, bullet.radius, 0, Math.PI * 2);
-    ctx.fill();
+export function drawBullet(ctx, bullet, sprite) {
+    ctx.save();
+    ctx.translate(bullet.pos.x, bullet.pos.y);
+    ctx.rotate((bullet.angle ?? 0) + Math.PI / 2);
+
+    if (sprite) {
+        const size = bullet.radius * 4;
+        ctx.drawImage(sprite, 64, 0, 64, 64, -size / 2, -size / 2, size, size);
+    }
 
     ctx.restore();
 }
 
 
-export function drawAsteroid(ctx, asteroid) {
+export function drawAsteroid(ctx, asteroid, sprite) {
     ctx.save();
+    ctx.translate(asteroid.pos.x, asteroid.pos.y);
 
-    ctx.strokeStyle = '#aaaaaa';
-    ctx.lineWidth = 2;
-
-    ctx.beginPath();
-    ctx.arc(
-        asteroid.pos.x,
-        asteroid.pos.y,
-        asteroid.radius,
-        0,
-        Math.PI * 2
-    );
-    ctx.stroke();
+    if (sprite) {
+        const size = asteroid.radius * 2;
+        ctx.drawImage(sprite, 128, 0, 64, 64, -size / 2, -size / 2, size, size);
+    }
 
     ctx.restore();
 }

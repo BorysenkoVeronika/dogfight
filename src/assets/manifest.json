@@ -1,0 +1,11 @@
+{
+    "sprites": {
+        "game": "/src/assets/sprites.svg"
+    },
+    "sounds": {
+        "shoot": "/src/assets/shoot.wav",
+        "hit": "/src/assets/hit.wav",
+        "explosion": "/src/assets/explosion.wav"
+    },
+    "arena": "/src/assets/arena.json"
+}

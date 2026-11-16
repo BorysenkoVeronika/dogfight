@@ -38,3 +38,30 @@ h1 {
   background: #252525;
   border: 1px solid #555;
 }
+
+#loading-controls {
+  max-width: 800px;
+  text-align: center;
+}
+
+#loading-status {
+  margin: 16px 0;
+}
+
+#retry-button {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 4px;
+  background: #3498db;
+  color: white;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+#retry-button:hover {
+  background: #2980b9;
+}
+
+#retry-button[hidden] {
+  display: none;
+}

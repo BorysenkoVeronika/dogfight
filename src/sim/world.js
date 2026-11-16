@@ -1,6 +1,7 @@
 import { detectCollisions } from './collision.js';
 import { Explosion } from './explosion.js';
 import { updateHoming } from './behaviors/homing.js';
+import { gameEvents } from '../events.js'
 
 export class World {
     #entities = new Map();
@@ -68,13 +69,21 @@ export class World {
 
                 target.takeDamage(1);
                 bullet.alive = false;
+                gameEvents.dispatchEvent(new Event('hit'))
 
                 if (target.kind === 'asteroid' && wasAlive && !target.alive) {
                     this.score += 10;
+
+                    gameEvents.dispatchEvent(
+                        new CustomEvent('scoreChanged', {
+                            detail: this.score
+                        })
+                    );
                 }
 
                 if (target.kind === 'ship' && wasAlive && !target.alive) {
                     this.spawn(new Explosion(target.pos));
+                    gameEvents.dispatchEvent(new Event('exploded'))
                 }
             }
 
@@ -89,6 +98,7 @@ export class World {
 
                 if (wasAlive && !ship.alive) {
                     this.spawn(new Explosion(ship.pos));
+                    gameEvents.dispatchEvent(new Event('exploded'))
                 }
             }
 

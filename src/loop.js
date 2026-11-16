@@ -34,7 +34,7 @@ export function createLoop({
         }
 
         const alpha = accumulator / step;
-        
+
         renderFrames++;
         lastFrameDuration = frameTime * 1000;
 
