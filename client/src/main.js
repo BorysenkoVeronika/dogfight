@@ -13,7 +13,8 @@ import { Pickup } from './sim/pickup.js'
 import { createAudio } from './audio.js'
 import { createHud } from './hud.js'
 import { Lobby } from './lobby.js'
-import { createLobbyUI } from './lobby-ui.js'
+import { createLobbyUI, createMatchUI } from './lobby-ui.js'
+import { createConnection } from './connection.js'
 import {
   drawShip,
   drawStars,
@@ -24,42 +25,80 @@ import {
   drawPickup
 } from './render/draw.js'
 
+
 document.querySelector('#app').innerHTML = `
   <main>
     <h1>Dogfight</h1>
 
     <section id="lobby"></section>
+    <section id="match-ui" hidden></section>
 
     <div id="loading-controls" hidden>
-      <p id="loading-status">Preparando recursos...</p>
-      <button id="cancel-button">Cancelar carregamento</button>
-      <button id="retry-button" hidden>Tentar novamente</button>
+      <p id="loading-status">Preparing assets...</p>
+      <button id="cancel-button">Cancel Loading</button>
+      <button id="retry-button" hidden>Retry</button>
     </div>
 
     <canvas id="game" hidden></canvas>
   </main>
 `
 
+
 const canvas = document.querySelector('#game')
 const { ctx, resize } = createCanvas(canvas)
 const audio = createAudio()
 
+
 const lobbyElement = document.querySelector('#lobby')
+const matchElement = document.querySelector('#match-ui')
 const lobby = new Lobby()
+
 let selectedRoom = null
+let connection = null
 
 createLobbyUI(lobby, lobbyElement, ({ playerName, room }) => {
-  selectedRoom = room
   lobby.stop()
   lobbyElement.hidden = true
+  matchElement.hidden = false
   canvas.hidden = false
-  canvas.style.aspectRatio = `${room.arena.width} / ${room.arena.height}`
+
+  // Preserve the local arena from Lab 03.
+  selectedRoom = {
+    ...room,
+    arena: { width: 800, height: 500 }
+  }
+
+  canvas.style.aspectRatio = '800 / 500'
   resize()
+
+  connection = createConnection()
+  createMatchUI(matchElement, connection)
+
+  connection.on('open', () => {
+    connection.send({
+      type: 'join',
+      roomId: room.id,
+      playerName
+    })
+  })
+
+  connection.on('failed', () => {
+    const status = matchElement.querySelector('#connection-status')
+    status.textContent = 'Unable to join room. Please reload and try again.'
+  })
+
+  connection.connect()
+
   loadingControls.hidden = false
-  loadGame(room)
+  loadGame(selectedRoom)
+})
+
+window.addEventListener('beforeunload', () => {
+  connection?.disconnect()
 })
 
 lobby.start()
+
 
 const loadingControls = document.querySelector('#loading-controls')
 const loadingStatus = document.querySelector('#loading-status')
@@ -79,7 +118,7 @@ function drawLoadingScreen(progress) {
   ctx.textAlign = 'center'
   ctx.fillStyle = '#ffffff'
   ctx.font = '20px Arial'
-  ctx.fillText('Carregando Dogfight...', width / 2, height / 2 - 35)
+  ctx.fillText('Loading Dogfight...', width / 2, height / 2 - 35)
 
   const barWidth = Math.min(320, width - 48)
   const barHeight = 14
@@ -220,7 +259,7 @@ function startGame(assets) {
 async function loadGame(room) {
   retryButton.hidden = true
   cancelButton.hidden = false
-  loadingStatus.textContent = 'Carregando recursos...'
+  loadingStatus.textContent = 'Loading resources...'
 
   const controller = new AbortController()
   loadingController = controller
@@ -239,7 +278,7 @@ async function loadGame(room) {
       onProgress(progress, completed, total) {
         drawLoadingScreen(progress)
         loadingStatus.textContent =
-          `Carregando recursos: ${completed}/${total}`
+          `Loading resources: ${completed}/${total}`
       }
     })
 
@@ -258,15 +297,15 @@ async function loadGame(room) {
       loadingController = null
     }
 
-    console.error('Erro ao carregar recursos:', error)
+    console.error('Error loading resources:', error)
 
     cancelButton.hidden = true
 
     if (error.name === 'AbortError') {
-      loadingStatus.textContent = 'Carregamento cancelado.'
+      loadingStatus.textContent = 'Loading canceled.'
     } else {
       loadingStatus.textContent =
-        'Falha ao carregar os recursos. Tente novamente.'
+        'Failed to load assets. Please try again.'
     }
 
     retryButton.hidden = false
@@ -274,7 +313,7 @@ async function loadGame(room) {
 }
 
 cancelButton.addEventListener('click', () => {
-  loadingStatus.textContent = 'Cancelando carregamento...'
+  loadingStatus.textContent = 'Canceling loading...'
   loadingController?.abort()
 })
 
