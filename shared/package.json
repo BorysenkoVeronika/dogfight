@@ -1,11 +1,19 @@
 {
-    "name": "@dogfight/shared",
-    "version": "1.0.0",
-    "private": true,
-    "type": "module",
-    "exports": {
-        "./sim/*": "./sim/*.js",
-        "./protocol/*": "./protocol/*.js",
-        "./codec/*": "./codec/*.js"
-    }
+  "name": "@dogfight/shared",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./sim/*": "./sim/*.ts",
+    "./protocol/*": "./protocol/*.ts",
+    "./codec/*": "./codec/*.ts",
+    "./protocol": "./protocol.ts",
+    "./types": "./types.ts"
+  },
+  "dependencies": {
+    "zod": "^4.1.0"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  }
 }

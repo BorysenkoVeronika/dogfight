@@ -12,10 +12,17 @@
     "dev": "npm run dev --workspace=client",
     "build": "npm run build --workspace=client",
     "preview": "npm run preview --workspace=client",
-    "test:lab05": "node --test shared/tests/*.test.js",
-    "bench:lab05": "node server/scripts/benchmark-codecs.js"
+    "test:lab05": "node --import tsx --test shared/tests/*.test.ts",
+    "bench:lab05": "node --import tsx server/scripts/benchmark-codecs.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p shared/tsconfig.json && tsc --noEmit -p server/tsconfig.json && tsc --noEmit -p client/tsconfig.json",
+    "test:lab06": "node --import tsx --test shared/tests/*.test.ts"
   },
   "overrides": {
     "minimatch": "^11.0.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "tsx": "^4.20.6",
+    "@types/node": "^22.15.0"
   }
 }

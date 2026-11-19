@@ -1,6 +1,8 @@
-# Dogfight — JavaScript Practice Labs
+# Dogfight — JavaScript & TypeScript Practice Labs
 ## Overview
-A small JavaScript game built with Vite and HTML Canvas.
+A browser multiplayer game built with TypeScript, Vite, Node.js, WebSockets, and HTML Canvas.
+
+Labs 01–05 established the JavaScript game and real-time networking. Lab 06 migrates the source to TypeScript with strict checking and runtime-validated protocol boundaries.
 
 The project explores JavaScript fundamentals, the event loop, fixed-timestep simulation, object-oriented programming, composition, asynchronous operations, and game architecture.
 
@@ -41,97 +43,48 @@ The project explores JavaScript fundamentals, the event loop, fixed-timestep sim
 
 ```text
 dogfight/
+├── .github/workflows/typecheck.yml    # CI: typecheck and tests
 ├── client/
-│   ├── public/
-│   │   ├── api/rooms.json
-│   │   ├── assets/               # Sprites and sound effects
-│   │   ├── favicon.svg
-│   │   └── icons.svg
+│   ├── public/                      # Images, audio, and static room JSON
 │   ├── src/
-│   │   ├── assets/               # Asset manifest and loader
-│   │   │   ├── arena.json
-│   │   │   ├── loader.js
-│   │   │   └── manifest.json
-│   │   ├── render/
-│   │   │   ├── canvas.js
-│   │   │   └── draw.js
-│   │   ├── audio.js
-│   │   ├── connection.js         # WebSocket client
-│   │   ├── determinism-check.js
-│   │   ├── events.js
-│   │   ├── hud.js
-│   │   ├── input.js
-│   │   ├── lobby-ui.js
-│   │   ├── lobby.js
-│   │   ├── loop.js
-│   │   ├── main.js
-│   │   ├── netcode.js            # Prediction, reconciliation and interpolation
-│   │   ├── counter.js
-│   │   └── style.css
+│   │   ├── assets/loader.ts
+│   │   ├── render/{canvas,draw}.ts
+│   │   ├── connection.ts            # Typed client WebSocket boundary
+│   │   ├── netcode.ts               # Prediction/reconciliation/interpolation
+│   │   ├── lobby.ts, lobby-ui.ts
+│   │   ├── input.ts, loop.ts, audio.ts, events.ts, hud.ts
+│   │   └── main.ts
 │   ├── index.html
-│   ├── package.json
-│   └── vite.config.js
+│   ├── vite.config.ts
+│   └── tsconfig.json
 ├── server/
-│   ├── scripts/
-│   │   └── benchmark-codecs.js
+│   ├── scripts/benchmark-codecs.ts
 │   ├── src/
-│   │   ├── config.js
-│   │   ├── event-log.js
-│   │   ├── index.js              # HTTP server and API routes
-│   │   ├── match.js              # Authoritative 30 Hz simulation
-│   │   ├── protocol.js
-│   │   ├── replay.js
-│   │   ├── room-manager.js
-│   │   ├── room.js
-│   │   └── ws.js                 # WebSocket server
-│   └── package.json
+│   │   ├── index.ts                 # HTTP API
+│   │   ├── ws.ts                    # Typed WebSocket server
+│   │   ├── match.ts                 # 30 Hz authoritative simulation
+│   │   ├── room.ts, room-manager.ts
+│   │   ├── config.ts                # Zod environment schema
+│   │   ├── event-log.ts, replay.ts
+│   │   └── ws-types.d.ts
+│   ├── .env.example
+│   └── tsconfig.json
 ├── shared/
-│   ├── codec/
-│   │   ├── binary.js            # DataView binary protocol
-│   │   └── json.js
-│   ├── protocol/
-│   │   └── messages.js
-│   ├── sim/
-│   │   ├── behaviors/homing.js
-│   │   ├── arena.js
-│   │   ├── asteroid.js
-│   │   ├── bullet.js
-│   │   ├── collision.js
-│   │   ├── determinism.js
-│   │   ├── entity.js
-│   │   ├── events.js
-│   │   ├── explosion.js
-│   │   ├── input.js
-│   │   ├── pickup.js
-│   │   ├── random.js             # Seeded mulberry32 PRNG
-│   │   ├── ship.js
-│   │   ├── vector.js
-│   │   └── world.js
-│   ├── tests/
-│   │   ├── codec.test.js
-│   │   └── determinism.test.js
-│   └── package.json
-├── docs/
-│   └── lab04-m3-rss.png
-├── .gitignore
-├── package.json                # npm workspaces and project scripts
-├── package-lock.json
+│   ├── types.ts                     # Discriminated snapshots / branded IDs
+│   ├── protocol.ts                  # Zod schemas and parsed message types
+│   ├── codec/{index,binary,json}.ts # Codec interface + implementations
+│   ├── sim/                         # Typed deterministic simulation
+│   │   ├── bus.ts                   # Generic event bus
+│   │   ├── world.ts, ship.ts, vector.ts, entity.ts
+│   │   └── other simulation modules (.ts)
+│   ├── tests/                       # Codec, determinism, schema tests
+│   └── tsconfig.json
+├── docs/lab04-m3-rss.png
+├── tsconfig.base.json
+├── tsconfig.json
+├── package.json                     # npm workspaces and scripts
 └── README.md
 ```
-
-## Technologies
-
-- **JavaScript (ES Modules)** — browser and server application code.
-- **Node.js** — HTTP API, authoritative game loop, file streams and tests.
-- **WebSockets (`ws`)** — real-time bidirectional communication.
-- **HTML5 Canvas / Web Audio API** — game rendering and sound effects.
-- **Vite** — frontend development server and production build.
-- **npm workspaces** — `client`, `server` and `@dogfight/shared` packages.
-- **Node.js Streams (`Transform`, `pipeline`)** — NDJSON event logging and replays.
-- **`ArrayBuffer` / `DataView`** — versioned binary networking protocol, alongside JSON.
-- **ESLint and Prettier** — code quality and formatting tools.
-- **Node.js built-in test runner** — codec and determinism checks.
-
 
 ## Lab 01 — JavaScript Fundamentals
 ### Overview
@@ -681,26 +634,6 @@ Promises, async/await and queueMicrotask use the microtask queue, while setTimeo
 
 Understanding this execution order is important when working with asynchronous operations, animations and game loops.
 
-## Lab 04 — Node.js, Streams and WebSockets
-
-### Overview
-
-This lab explores Node.js HTTP servers, WebSockets, event-driven architecture, streams, backpressure, and memory-efficient file processing.
-
-### M1 — HTTP Server
-
-- Implemented an HTTP server using Node.js.
-- Added health check and room management endpoints.
-- Implemented static file serving.
-- Added request validation and graceful shutdown.
-
-### M2 — WebSocket Lifecycle
-
-- Implemented WebSocket connections using `ws`.
-- Added room joining, player roster updates, and chat broadcasting.
-- Implemented message validation and payload limits.
-- Added connection timeouts and heartbeat monitoring.
-
 ### M3 — Streams and Backpressure
 
 A synthetic 200 MiB NDJSON file was streamed through the replay endpoint using a download rate limit of 5 MiB/s.
@@ -835,13 +768,25 @@ Handled: Rejection demo
 
 These experiments demonstrate why EventEmitter error listeners and Promise rejection handlers are necessary for reliable Node.js servers.
 
+## Technologies
+
+- **TypeScript (strict mode)** — typed client, server and shared simulation; checked with `tsc --noEmit`.
+- **Zod 4** — runtime schema validation and inferred wire-message types.
+- **Node.js / `tsx`** — TypeScript server, 30 Hz authoritative match loop, HTTP APIs, streams, and test runner.
+- **WebSockets (`ws`)** — real-time input/snapshot synchronization; JSON and binary protocols.
+- **`ArrayBuffer` / `DataView`** — validated versioned binary codec with explicit little-endian layout.
+- **Vite, HTML5 Canvas, Web Audio API** — TypeScript client build, rendering, and sound.
+- **npm workspaces** — `client`, `server`, and `shared` packages.
+- **ESLint / Prettier** — source formatting and lint tooling.
+- **GitHub Actions** — typecheck and regression tests on push and pull requests.
+
 ## Lab 05 — Real-Time Networking
 
 **Run:** `npm install` at the repository root; in separate terminals run `npm run dev --workspace=server` and `npm run dev --workspace=client`. Open the Vite URL in two browser windows, and join the same room.
 
 **Controls:** Arrow Up = thrust, Arrow Left/Right = turn, Space = fire.
 
-The authoritative server runs a fixed 30 Hz `World.step()` per room, validates sequenced inputs, and sends snapshots containing the server tick, last acknowledged input sequence, per-player IDs, a seeded PRNG value, and entity state. Both runtimes use the pure `shared/` workspace. A seeded `mulberry32` replaces gameplay randomness. The Node test imports the simulation without DOM and produces a repeatable 1,000-step hash; verify the same hash in the browser by calling `import('/src/determinism-check.js').then(m => console.log(m.determinismHash()))` in DevTools.
+The authoritative server runs a fixed 30 Hz `World.step()` per room, validates sequenced inputs, and sends snapshots containing the server tick, last acknowledged input sequence, per-player IDs, a seeded PRNG value, and entity state. Both runtimes use the pure `shared/` workspace. A seeded `mulberry32` replaces gameplay randomness. The Node test imports the simulation without DOM and produces a repeatable 1,000-step hash; verify the same hash in the browser by calling `import('/src/determinism-check.ts').then(m => console.log(m.determinismHash()))` in DevTools.
 
 ### Netcode: latency, consistency, and cheating
 
@@ -857,9 +802,9 @@ The authoritative server runs a fixed 30 Hz `World.step()` per room, validates s
 
 ### M4 — Binary (`DataView`) protocol
 
-The versioned, little-endian wire layout is specified in the opening comment of `shared/codec/binary.js`. Inputs use 16 bytes; snapshots contain a header, entity count, UTF-8 player IDs, entity records, events, and angles quantized to signed `Int16` milliradians (~0.001 rad resolution). The browser uses `socket.binaryType = 'arraybuffer'`. **Binary is the default**; add `?codec=json` to the game URL to compare with the original JSON protocol.
+The versioned, little-endian wire layout is specified in the opening comment of `shared/codec/binary.ts`. Inputs use 16 bytes; snapshots contain a header, entity count, UTF-8 player IDs, entity records, events, and angles quantized to signed `Int16` milliradians (~0.001 rad resolution). The browser uses `socket.binaryType = 'arraybuffer'`. **Binary is the default**; add `?codec=json` to the game URL to compare with the original JSON protocol.
 
-Run `npm run test:lab05` for the round-trip and deterministic-state tests. Run `npm run bench:lab05` for a synthetic **four-player, 30 Hz** comparison. The values below were measured by running the included benchmark script in this environment (Node.js 22.16.0, 20,000 encode/decode iterations per codec). This is a synthetic four-ship payload, not real-match traffic; timing varies by machine.
+Run `npm run test:lab05` for the round-trip, deterministic-state, and runtime protocol tests. Run `npm run bench:lab05` for a synthetic **four-player, 30 Hz** comparison. The values below were measured by running the included benchmark script in this environment (Node.js 22.16.0, 20,000 encode/decode iterations per codec). This is a synthetic four-ship payload, not real-match traffic; timing varies by machine.
 
 | Codec | Bytes/snapshot | KiB/s per client (down) | KiB/s per client (up) | Encode+decode µs |
 | --- | ---: | ---: | ---: | ---: |
@@ -880,4 +825,52 @@ The deterministic hash was verified by repeated Node executions **only**. A Chro
 
 For a four-ship synthetic snapshot at 30 Hz, binary encoding used **310 bytes** versus **667 bytes** for JSON (approximately **53.5% fewer bytes**). The JSON codec was faster in this particular encode/decode benchmark; the binary codec reduced estimated bandwidth.
 
-**Evidence not captured in this environment:** M1 screenshot of the 100 ms injected-latency netgraph; M2 before/after prediction and deliberately broken-determinism correction screenshot; M3 two-player 20-second side-by-side GIF at 100 ms ± 30 ms jitter and 2% loss. These require observing a running browser session and should not be presented as measured until captured. The benchmark above does meet the M4 *synthetic comparison* requirement, but does not establish network throughput in an actual match. The repository can be published without these files, although the Lab 05 demonstration checklist would remain incomplete.
+
+## Lab 06 — TypeScript: Types for Both Sides of the Wire
+
+Migrated the `client`, `server`, and `shared` workspaces from JavaScript to TypeScript. The canvas renderer, lobby, multiplayer gameplay and server simulation continue to use the existing application architecture. **No UI framework was added:** React/Svelte/Vue were optional, and the vanilla lobby/HUD already work without extra runtime dependencies or bundle size.
+
+### Toolchain and run commands
+
+```bash
+npm install
+npm run typecheck
+npm run test:lab06
+npm run build
+npm run dev --workspace=server
+npm run dev --workspace=client  # separate terminal
+```
+
+The root `tsconfig.base.json` enforces `strict`, `noUncheckedIndexedAccess`, and `verbatimModuleSyntax`. Every workspace has its own `tsconfig.json`. The server runs through `tsx` (Node.js TypeScript type stripping is also suitable for erasable syntax); Vite transpiles the client, while `tsc` checks types independently. `.github/workflows/typecheck.yml` installs dependencies and runs the same typecheck/tests in CI. `server/.env.example` documents optional configuration; real `.env` files remain ignored.
+
+### What TypeScript found
+
+These are concrete incompatibilities surfaced during the migration and fixed in the code:
+
+1. **Nullable Canvas and DOM elements:** `getContext('2d')` and `querySelector()` can return `null`. The renderer now checks those results before using them instead of assuming they exist.
+2. **Unchecked collection/snapshot lookups:** `Map.get()`, `history[i]` and `find()` can return `undefined`. The world and netcode now guard missing entries before reading their properties.
+3. **Mutation of a readonly vector:** the local prediction experiment modified `ship.pos.x` directly. It now replaces `ship.pos` with a new `Vector2`, preserving the `readonly x/y` contract.
+4. **Untrusted network JSON:** the previous code accessed results of `JSON.parse()` directly. Messages now enter as `unknown`, then pass through Zod `safeParse` and a `Result`-style parser before entering the game logic.
+5. **Unbranded snapshot identities:** raw numeric entity IDs cannot be assigned straight to `EntityId`. `fromSnapshot()` validates them with `entityId()`, catching accidental mixing of unrelated numeric values.
+
+### Three particularly useful types
+
+**1. `ClientMessage` inferred from a Zod discriminated union:** `type` selects the exact permitted fields for `join`, `chat`, `input`, `ping`, and `networkConfig`. For example, an input has a three-value `turn` (`-1 | 0 | 1`). The compiler narrows handlers by `type`; the schema also checks real messages at runtime, where TypeScript itself has no effect.
+
+**2. `EntitySnapshot` plus branded numbers:** each snapshot has a literal `kind` (`ship`, `bullet`, `asteroid`, `pickup`, or `explosion`) and only the properties that apply to that kind. The exhaustive `never` case makes an unhandled entity kind a compile error. Branded `EntityId`, `Tick`, and `Seq` types prevent swapping unrelated numeric concepts while remaining numbers at runtime. `Vector2` and snapshot fields are `readonly` at compile time.
+
+**3. `Bus<GameEvents>`:** generic `on<K extends keyof Events>()`/`emit()` methods connect an event name to its expected payload. `scoreChanged` requires a number; `fired` requires `null`. That relationship replaces scattered, loosely typed browser event payloads without introducing a framework.
+
+### Binary codec and validation
+
+`shared/codec/index.ts` defines a `Codec<T>` interface and JSON/binary implementations. The binary decoder checks the version byte, truncated lengths, numeric finiteness, input turn/flag ranges, and entity/event kinds. Its result is a typed `Snapshot`; the JSON variant goes through a Zod-backed boundary. The server's hand-written Lab 04 message validator was removed in favor of `shared/protocol.ts`.
+
+**Type assertions:** the only three `as` casts in application source are the `EntityId`, `Tick`, and `Seq` constructors, which attach brands *after* validating numbers. No `any` is used in application TypeScript.
+
+### Automated checks and benchmark
+
+The project includes TypeScript type-checking, codec and determinism tests, protocol validation tests, and a GitHub Actions workflow that runs checks on each push and pull request.
+
+The existing three codec/determinism regression tests passed in Node.js 22.16.0, including the deterministic state hash `04d96aea`.
+
+A synthetic snapshot benchmark measured JSON at 680 bytes and binary at 310 bytes, equivalent to approximately 19.92 KiB/s versus 9.08 KiB/s per client at 30 Hz. These figures describe the synthetic benchmark rather than live match traffic.
