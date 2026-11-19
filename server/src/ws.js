@@ -2,12 +2,32 @@ import { WebSocketServer } from 'ws';
 import { randomUUID } from 'node:crypto';
 import { validateMessage, PROTOCOL_VERSION } from './protocol.js';
 
+const MESSAGE_RATE = 10;
+const MESSAGE_BURST = 10;
+const MAX_PLAYERS_PER_ROOM = 8;
+const MAX_BUFFERED_BYTES = 64 * 1024;
+
 export function createWebSocketServer(server, roomManager) {
     const wss = new WebSocketServer({
         server,
         path: '/ws',
         maxPayload: 4096,
     });
+
+    function sendToClient(socket, message, critical = false) {
+        if (socket.readyState !== 1) return;
+
+        if (socket.bufferedAmount > MAX_BUFFERED_BYTES) {
+            if (critical) {
+                console.warn('WebSocket closed: slow client');
+                socket.close(1008, 'Slow client');
+            }
+
+            return;
+        }
+
+        socket.send(message);
+    }
 
     function broadcastRoster(room) {
         const players = [...room.players.values()];
@@ -20,7 +40,7 @@ export function createWebSocketServer(server, roomManager) {
 
         for (const client of wss.clients) {
             if (client.room === room && client.readyState === 1) {
-                client.send(message);
+                sendToClient(client, message, true);
             }
         }
     }
@@ -28,6 +48,26 @@ export function createWebSocketServer(server, roomManager) {
     wss.on('connection', (socket) => {
         socket.player = null;
         socket.room = null;
+
+        let tokens = MESSAGE_BURST;
+        let lastRefill = performance.now();
+
+        function consumeToken() {
+            const now = performance.now();
+            const elapsed = (now - lastRefill) / 1000;
+
+            tokens = Math.min(
+                MESSAGE_BURST,
+                tokens + elapsed * MESSAGE_RATE
+            );
+
+            lastRefill = now;
+
+            if (tokens < 1) return false;
+
+            tokens--;
+            return true;
+        }
 
         socket.missedPongs = 0;
 
@@ -47,6 +87,12 @@ export function createWebSocketServer(server, roomManager) {
         }, 5000);
 
         socket.on('message', (raw) => {
+            if (!consumeToken()) {
+                console.warn('WebSocket closed: rate limit exceeded');
+                socket.close(1008, 'Rate limit exceeded');
+                return;
+            }
+
             let data;
 
             if (raw.length > 4096) {
@@ -84,6 +130,12 @@ export function createWebSocketServer(server, roomManager) {
                     return;
                 }
 
+                if (room.players.size >= MAX_PLAYERS_PER_ROOM) {
+                    console.warn('WebSocket closed: room full');
+                    socket.close(1008, 'Room full');
+                    return;
+                }
+
                 const player = {
                     id: randomUUID(),
                     name: data.playerName.trim(),
@@ -107,6 +159,7 @@ export function createWebSocketServer(server, roomManager) {
             }
 
             if (data.type === 'chat') {
+
                 const message = data.message.trim();
 
                 socket.room.chat(socket.player.id, message);
@@ -124,7 +177,7 @@ export function createWebSocketServer(server, roomManager) {
                         client.room === socket.room &&
                         client.readyState === 1
                     ) {
-                        client.send(payload);
+                        sendToClient(client, payload);
                     }
                 }
             }

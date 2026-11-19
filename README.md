@@ -627,6 +627,140 @@ Promises, async/await and queueMicrotask use the microtask queue, while setTimeo
 
 Understanding this execution order is important when working with asynchronous operations, animations and game loops.
 
+### M3 — Streams and Backpressure
+
+A synthetic 200 MiB NDJSON file was streamed through the replay endpoint using a download rate limit of 5 MiB/s.
+
+The server's resident set size (RSS) was sampled approximately once per second during the transfer.
+
+**Results:**
+
+| Metric | Result |
+|---|---:|
+| File size | 200 MiB |
+| Download rate limit | 5 MiB/s |
+| Duration | ~40 seconds |
+| RSS samples | 40 |
+| Minimum RSS | 58.38 MB |
+| Average RSS | 67.85 MB |
+| Maximum RSS | 82.49 MB |
+
+**Memory Usage Graph**
+
+![Server RSS during throttled replay](docs/lab04-m3-rss.png)
+
+**Conclusion**
+
+Memory usage fluctuated between 58.38 MB and 82.49 MB without sustained growth during the transfer.
+
+The streaming implementation transferred the large file without loading it entirely into memory, demonstrating memory-efficient processing with Node.js streams and backpressure.
+
+### M4 — Abuse Handling and the Event Loop
+
+#### Abuse Handling
+
+Implemented the following server protections:
+
+- **Rate limiting:** Per-connection token bucket allowing 10 messages per second, with a burst capacity of 10. Connections exceeding the limit are closed.
+- **Payload limit:** WebSocket messages are limited to 4 KiB using `maxPayload`.
+- **Room limits:** Maximum of 8 players per room and 10 rooms per server.
+- **Slow clients:** When `socket.bufferedAmount` exceeds 64 KiB, non-critical chat messages are dropped and critical updates trigger connection closure.
+
+#### Node.js Event Loop
+
+The Node.js event loop processes asynchronous operations through several phases:
+
+1. **Timers:** Executes callbacks scheduled by `setTimeout()` and `setInterval()`.
+2. **Pending callbacks:** Executes certain deferred I/O callbacks.
+3. **Idle/prepare:** Internal Node.js operations.
+4. **Poll:** Processes I/O events, including network activity.
+5. **Check:** Executes `setImmediate()` callbacks.
+6. **Close callbacks:** Handles events such as socket closure.
+
+Microtasks, including Promise callbacks, are processed at appropriate checkpoints between JavaScript callbacks.
+
+**Blocking experiment**
+
+Implemented `/api/slow` with a deliberate synchronous busy-loop lasting 300 ms.
+
+The endpoint returned:
+
+```json
+{"message":"Blocking operation completed","durationMs":300}
+```
+
+During a synchronous block, Node.js cannot process other JavaScript callbacks, including incoming WebSocket chat messages.
+
+A temporary 30-second block made the delay clearly observable. The endpoint was then restored to the required 300 ms.
+
+#### Backpressure
+
+Backpressure occurs when data is produced faster than it can be consumed.
+
+In M3, streams used `pipeline()` to manage data flow between the source, transformation, and destination.
+
+A synthetic 200 MiB NDJSON file was downloaded with a rate limit of 5 MiB/s.
+
+The server's RSS remained between 58.38 MB and 82.49 MB, without sustained growth during the approximately 40-second transfer.
+
+This demonstrated memory-efficient streaming without buffering the entire file.
+
+#### Unhandled Errors and Rejections
+
+**Unhandled EventEmitter error**
+
+Emitting an `"error"` event without a listener caused Node.js to throw an exception:
+
+```text
+node:events:505
+    throw er; // Unhandled 'error' event
+
+Error: boom
+Emitted 'error' event at:
+```
+
+Adding an error listener prevented the crash:
+
+```javascript
+emitter.on('error', (error) => {
+    console.error('Handled:', error.message);
+});
+```
+
+Output:
+
+```text
+Handled: boom
+```
+
+**Unhandled Promise rejection**
+
+An unhandled rejection, executed with `--unhandled-rejections=strict`, terminated the process:
+
+```text
+Error: Unhandled rejection demo
+    at [eval]:1:16
+
+Node.js v26.13.1
+```
+
+Handling the rejection with `.catch()` prevented the crash:
+
+```javascript
+Promise.reject(new Error('Rejection demo'))
+    .catch((error) => {
+        console.error('Handled:', error.message);
+    });
+```
+
+Output:
+
+```text
+Handled: Rejection demo
+```
+
+These experiments demonstrate why EventEmitter error listeners and Promise rejection handlers are necessary for reliable Node.js servers.
+
 ## Technologies
 - JavaScript (ES Modules)
 

@@ -1,3 +1,7 @@
+import { createReadStream } from 'node:fs';
+import { pipeline } from 'node:stream/promises';
+import { getReplayPath, getReplaySize } from './replay.js';
+import { closeEventLog } from './event-log.js';
 import { createWebSocketServer } from './ws.js';
 import { RoomManager } from './room-manager.js';
 import { readFile } from 'node:fs/promises';
@@ -89,6 +93,61 @@ async function serveStatic(req, res) {
 
 const server = createServer(async (req, res) => {
 
+    if (req.method === 'GET' && req.url === '/api/slow') {
+        const start = performance.now();
+
+        while (performance.now() - start < 300) {
+            // Deliberately block the event loop for 300 ms.
+        }
+
+        res.writeHead(200, {
+            'Content-Type': 'application/json; charset=utf-8',
+        });
+
+        res.end(JSON.stringify({
+            message: 'Blocking operation completed',
+            durationMs: Math.round(performance.now() - start),
+        }));
+
+        return;
+    }
+
+
+    if (req.method === 'GET' && req.url.startsWith('/api/replays/')) {
+        const id = req.url.slice('/api/replays/'.length).split('?')[0];
+
+        try {
+            const filePath = getReplayPath(id);
+            const size = await getReplaySize(id);
+
+            res.writeHead(200, {
+                'Content-Type': 'application/x-ndjson; charset=utf-8',
+                'Content-Length': size,
+                'Cache-Control': 'no-store',
+            });
+
+            await pipeline(createReadStream(filePath), res);
+        } catch (error) {
+            if (res.headersSent) {
+                res.destroy(error);
+                return;
+            }
+
+            const status = error.code === 'ENOENT' ? 404 : 400;
+
+            res.writeHead(status, {
+                'Content-Type': 'application/json; charset=utf-8',
+            });
+
+            res.end(JSON.stringify({
+                error: status === 404 ? 'Replay not found' : 'Invalid replay',
+            }));
+        }
+
+        return;
+    }
+
+
     if (req.method === 'GET' && req.url === '/health') {
         res.writeHead(200, {
             'Content-Type': 'application/json; charset=utf-8',
@@ -143,7 +202,11 @@ const server = createServer(async (req, res) => {
             });
 
             res.end(JSON.stringify({
-                error: status === 413 ? 'Request body too large' : 'Invalid JSON',
+                error: status === 503
+                    ? 'Room limit reached'
+                    : status === 413
+                        ? 'Request body too large'
+                        : 'Invalid JSON',
             }));
         }
 
@@ -178,7 +241,7 @@ function shutdown(signal) {
     console.log(`Received ${signal}. Shutting down...`);
 
     for (const socket of wss.clients) {
-        socket.close(1001, 'Server shutting down');
+        socket.terminate();
     }
 
     wss.close((wsError) => {
@@ -187,16 +250,22 @@ function shutdown(signal) {
             process.exitCode = 1;
         }
 
-        server.close((httpError) => {
+        server.close(async (httpError) => {
             if (httpError) {
                 console.error('Error closing HTTP server:', httpError);
                 process.exitCode = 1;
-            } else {
-                console.log('Server closed successfully.');
             }
 
-            if (!wsError && !httpError) {
-                process.exitCode = 0;
+            try {
+                await closeEventLog();
+                console.log('Event log closed successfully.');
+            } catch (error) {
+                console.error('Error closing event log:', error);
+                process.exitCode = 1;
+            }
+
+            if (!httpError && !wsError) {
+                console.log('Server closed successfully.');
             }
         });
 
