@@ -17,6 +17,13 @@ export class Asteroid extends Entity {
         this.height = height;
     }
 
+    static fromSnapshot(s) {
+        const asteroid = new Asteroid(new Vector2(s.x, s.y), new Vector2(s.vx, s.vy), s.radius, 800, 500);
+        asteroid.id = s.id;
+        asteroid.angle = s.angle;
+        return asteroid;
+    }
+
     update(dt) {
         super.update(dt);
 

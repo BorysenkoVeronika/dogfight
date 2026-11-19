@@ -5,12 +5,15 @@
   "type": "module",
   "workspaces": [
     "client",
-    "server"
+    "server",
+    "shared"
   ],
   "scripts": {
     "dev": "npm run dev --workspace=client",
     "build": "npm run build --workspace=client",
-    "preview": "npm run preview --workspace=client"
+    "preview": "npm run preview --workspace=client",
+    "test:lab05": "node --test shared/tests/*.test.js",
+    "bench:lab05": "node server/scripts/benchmark-codecs.js"
   },
   "overrides": {
     "minimatch": "^11.0.1"

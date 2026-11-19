@@ -41,42 +41,96 @@ The project explores JavaScript fundamentals, the event loop, fixed-timestep sim
 
 ```text
 dogfight/
-└── src/
-    ├── assets/
-    │   ├── arena.json
-    │   ├── explosion.wav
-    │   ├── hit.wav
-    │   ├── loader.js
-    │   ├── manifest.json
-    │   ├── shoot.wav
-    │   └── sprites.svg
-    ├── render/
-    │   ├── canvas.js
-    │   └── draw.js
-    ├── sim/
-    │   ├── behaviors/
-    │   │   └── homing.js
-    │   ├── arena.js
-    │   ├── asteroid.js
-    │   ├── bullet.js
-    │   ├── collision.js
-    │   ├── entity.js
-    │   ├── explosion.js
-    │   ├── pickup.js
-    │   ├── ship.js
-    │   ├── vector.js
-    │   └── world.js
-    ├── audio.js
-    ├── counter.js
-    ├── events.js
-    ├── hud.js
-    ├── input.js
-    ├── lobby-ui.js
-    ├── lobby.js
-    ├── loop.js
-    ├── main.js
-    └── style.css
+├── client/
+│   ├── public/
+│   │   ├── api/rooms.json
+│   │   ├── assets/               # Sprites and sound effects
+│   │   ├── favicon.svg
+│   │   └── icons.svg
+│   ├── src/
+│   │   ├── assets/               # Asset manifest and loader
+│   │   │   ├── arena.json
+│   │   │   ├── loader.js
+│   │   │   └── manifest.json
+│   │   ├── render/
+│   │   │   ├── canvas.js
+│   │   │   └── draw.js
+│   │   ├── audio.js
+│   │   ├── connection.js         # WebSocket client
+│   │   ├── determinism-check.js
+│   │   ├── events.js
+│   │   ├── hud.js
+│   │   ├── input.js
+│   │   ├── lobby-ui.js
+│   │   ├── lobby.js
+│   │   ├── loop.js
+│   │   ├── main.js
+│   │   ├── netcode.js            # Prediction, reconciliation and interpolation
+│   │   ├── counter.js
+│   │   └── style.css
+│   ├── index.html
+│   ├── package.json
+│   └── vite.config.js
+├── server/
+│   ├── scripts/
+│   │   └── benchmark-codecs.js
+│   ├── src/
+│   │   ├── config.js
+│   │   ├── event-log.js
+│   │   ├── index.js              # HTTP server and API routes
+│   │   ├── match.js              # Authoritative 30 Hz simulation
+│   │   ├── protocol.js
+│   │   ├── replay.js
+│   │   ├── room-manager.js
+│   │   ├── room.js
+│   │   └── ws.js                 # WebSocket server
+│   └── package.json
+├── shared/
+│   ├── codec/
+│   │   ├── binary.js            # DataView binary protocol
+│   │   └── json.js
+│   ├── protocol/
+│   │   └── messages.js
+│   ├── sim/
+│   │   ├── behaviors/homing.js
+│   │   ├── arena.js
+│   │   ├── asteroid.js
+│   │   ├── bullet.js
+│   │   ├── collision.js
+│   │   ├── determinism.js
+│   │   ├── entity.js
+│   │   ├── events.js
+│   │   ├── explosion.js
+│   │   ├── input.js
+│   │   ├── pickup.js
+│   │   ├── random.js             # Seeded mulberry32 PRNG
+│   │   ├── ship.js
+│   │   ├── vector.js
+│   │   └── world.js
+│   ├── tests/
+│   │   ├── codec.test.js
+│   │   └── determinism.test.js
+│   └── package.json
+├── docs/
+│   └── lab04-m3-rss.png
+├── .gitignore
+├── package.json                # npm workspaces and project scripts
+├── package-lock.json
+└── README.md
 ```
+
+## Technologies
+
+- **JavaScript (ES Modules)** — browser and server application code.
+- **Node.js** — HTTP API, authoritative game loop, file streams and tests.
+- **WebSockets (`ws`)** — real-time bidirectional communication.
+- **HTML5 Canvas / Web Audio API** — game rendering and sound effects.
+- **Vite** — frontend development server and production build.
+- **npm workspaces** — `client`, `server` and `@dogfight/shared` packages.
+- **Node.js Streams (`Transform`, `pipeline`)** — NDJSON event logging and replays.
+- **`ArrayBuffer` / `DataView`** — versioned binary networking protocol, alongside JSON.
+- **ESLint and Prettier** — code quality and formatting tools.
+- **Node.js built-in test runner** — codec and determinism checks.
 
 
 ## Lab 01 — JavaScript Fundamentals
@@ -627,6 +681,26 @@ Promises, async/await and queueMicrotask use the microtask queue, while setTimeo
 
 Understanding this execution order is important when working with asynchronous operations, animations and game loops.
 
+## Lab 04 — Node.js, Streams and WebSockets
+
+### Overview
+
+This lab explores Node.js HTTP servers, WebSockets, event-driven architecture, streams, backpressure, and memory-efficient file processing.
+
+### M1 — HTTP Server
+
+- Implemented an HTTP server using Node.js.
+- Added health check and room management endpoints.
+- Implemented static file serving.
+- Added request validation and graceful shutdown.
+
+### M2 — WebSocket Lifecycle
+
+- Implemented WebSocket connections using `ws`.
+- Added room joining, player roster updates, and chat broadcasting.
+- Implemented message validation and payload limits.
+- Added connection timeouts and heartbeat monitoring.
+
 ### M3 — Streams and Backpressure
 
 A synthetic 200 MiB NDJSON file was streamed through the replay endpoint using a download rate limit of 5 MiB/s.
@@ -761,13 +835,49 @@ Handled: Rejection demo
 
 These experiments demonstrate why EventEmitter error listeners and Promise rejection handlers are necessary for reliable Node.js servers.
 
-## Technologies
-- JavaScript (ES Modules)
+## Lab 05 — Real-Time Networking
 
-- HTML5 Canvas
+**Run:** `npm install` at the repository root; in separate terminals run `npm run dev --workspace=server` and `npm run dev --workspace=client`. Open the Vite URL in two browser windows, and join the same room.
 
-- Vite
+**Controls:** Arrow Up = thrust, Arrow Left/Right = turn, Space = fire.
 
-- ESLint
+The authoritative server runs a fixed 30 Hz `World.step()` per room, validates sequenced inputs, and sends snapshots containing the server tick, last acknowledged input sequence, per-player IDs, a seeded PRNG value, and entity state. Both runtimes use the pure `shared/` workspace. A seeded `mulberry32` replaces gameplay randomness. The Node test imports the simulation without DOM and produces a repeatable 1,000-step hash; verify the same hash in the browser by calling `import('/src/determinism-check.js').then(m => console.log(m.determinismHash()))` in DevTools.
 
-- Prettier
+### Netcode: latency, consistency, and cheating
+
+**Latency:** Without prediction, the local ship only moves when a snapshot arrives, making even 100 ms of one-way artificial delay noticeable. With prediction, inputs are immediately applied using the shared ship simulation, retained in a sequence-numbered buffer, and sent to the server. When a snapshot arrives, the client restores the authoritative state, discards acknowledged inputs, replays pending inputs, and smoothly blends visual corrections over approximately 100 ms. The netgraph reports RTT, snapshot age, pending inputs, correction magnitude, and outgoing/incoming traffic. Set Latency to `100`, Jitter to `0`, Drop to `0`, then compare **Client prediction** on versus off and record a screenshot showing the netgraph.
+
+**Consistency:** Fixed time steps, reproducible inputs, and a seeded random generator reduce client/server drift. The **Break determinism** checkbox deliberately adds `Math.random()` to predicted movement for the M2 exercise. Observe growing corrections in the netgraph, capture the result, then turn the checkbox off; do not leave this experiment enabled during normal play. Real collisions still produce correction spikes because the client predicts only the local ship, not the whole collision world.
+
+**Cheating:** The client submits only validated `{seq,tick,thrust,turn,fire}` inputs, not its own location. The server computes all authoritative positions and can reject malformed data or rate-limit excessive traffic. This prevents a client from teleporting by sending forged coordinates; a determined attacker could still abuse allowed inputs, so server limits remain necessary.
+
+**Interpolation:** Other entities render from buffered snapshots with a live-adjustable delay (default 100 ms). A larger delay handles more jitter but shows older remote positions; a smaller delay reduces visible latency but increases stutter if a snapshot arrives late. Appearing and disappearing entities are handled at snapshot boundaries. The player's bullets are spawned immediately in a local predicted visual layer and are replaced when a matching authoritative bullet arrives.
+
+**Latency demonstration:** Two browser windows, same room, configure `100 ms` latency, `30 ms` jitter, and `2%` drop. Record **20 seconds of both windows side-by-side** as a GIF, then put it at the very top of this README (for the rest of the course). The GIF must be captured on the user's running game, not generated from synthetic data.
+
+### M4 — Binary (`DataView`) protocol
+
+The versioned, little-endian wire layout is specified in the opening comment of `shared/codec/binary.js`. Inputs use 16 bytes; snapshots contain a header, entity count, UTF-8 player IDs, entity records, events, and angles quantized to signed `Int16` milliradians (~0.001 rad resolution). The browser uses `socket.binaryType = 'arraybuffer'`. **Binary is the default**; add `?codec=json` to the game URL to compare with the original JSON protocol.
+
+Run `npm run test:lab05` for the round-trip and deterministic-state tests. Run `npm run bench:lab05` for a synthetic **four-player, 30 Hz** comparison. The values below were measured by running the included benchmark script in this environment (Node.js 22.16.0, 20,000 encode/decode iterations per codec). This is a synthetic four-ship payload, not real-match traffic; timing varies by machine.
+
+| Codec | Bytes/snapshot | KiB/s per client (down) | KiB/s per client (up) | Encode+decode µs |
+| --- | ---: | ---: | ---: | ---: |
+| JSON | 667 | 19.54 | 2.34 | 5.32 |
+| Binary (`DataView`) | 310 | 9.08 | 0.47 | 6.12 |
+
+The reduced bytes/s are the benefit in this sample, even though binary encode+decode was slightly slower on this CPU. Results vary by machine and entity contents.
+
+### Verification results (executed here)
+
+The included `npm run test:lab05` passed **3 of 3** tests:
+
+- Binary input encode/decode round-trip.
+- Binary snapshot encode/decode round-trip within quantization tolerance.
+- Pure shared simulation import in Node and repeatable 1,000-step deterministic state hash: `04d96aea`.
+
+The deterministic hash was verified by repeated Node executions **only**. A Chrome-to-Node comparison was not run, so cross-runtime determinism is not yet confirmed.
+
+For a four-ship synthetic snapshot at 30 Hz, binary encoding used **310 bytes** versus **667 bytes** for JSON (approximately **53.5% fewer bytes**). The JSON codec was faster in this particular encode/decode benchmark; the binary codec reduced estimated bandwidth.
+
+**Evidence not captured in this environment:** M1 screenshot of the 100 ms injected-latency netgraph; M2 before/after prediction and deliberately broken-determinism correction screenshot; M3 two-player 20-second side-by-side GIF at 100 ms ± 30 ms jitter and 2% loss. These require observing a running browser session and should not be presented as measured until captured. The benchmark above does meet the M4 *synthetic comparison* requirement, but does not establish network throughput in an actual match. The repository can be published without these files, although the Lab 05 demonstration checklist would remain incomplete.

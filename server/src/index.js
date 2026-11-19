@@ -93,6 +93,18 @@ async function serveStatic(req, res) {
 
 const server = createServer(async (req, res) => {
 
+    if (req.method === 'GET' && req.url === '/api/stats') {
+        res.writeHead(200, {
+            'Content-Type': 'application/json; charset=utf-8',
+        });
+
+        res.end(JSON.stringify({
+            matches: roomManager.getStats(),
+        }));
+
+        return;
+    }
+
     if (req.method === 'GET' && req.url === '/api/slow') {
         const start = performance.now();
 
@@ -237,6 +249,8 @@ function shutdown(signal) {
     if (shuttingDown) return;
 
     shuttingDown = true;
+
+    roomManager.stopAll();
 
     console.log(`Received ${signal}. Shutting down...`);
 

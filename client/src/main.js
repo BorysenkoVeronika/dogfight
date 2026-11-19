@@ -1,20 +1,15 @@
 import './style.css'
+import { gameEvents } from './events.js';
 import manifest from './assets/manifest.json'
 import { loadAll } from './assets/loader.js'
 import { createLoop } from './loop.js'
 import { createInput } from './input.js'
-import { Ship } from './sim/ship.js'
-import { wrap } from './sim/arena.js'
 import { createCanvas } from './render/canvas.js'
-import { World } from './sim/world.js'
-import { Asteroid } from './sim/asteroid.js'
-import { Vector2 } from './sim/vector.js'
-import { Pickup } from './sim/pickup.js'
 import { createAudio } from './audio.js'
-import { createHud } from './hud.js'
 import { Lobby } from './lobby.js'
 import { createLobbyUI, createMatchUI } from './lobby-ui.js'
 import { createConnection } from './connection.js'
+import { createNetcode } from './netcode.js'
 import {
   drawShip,
   drawStars,
@@ -136,123 +131,108 @@ function drawLoadingScreen(progress) {
   ctx.fillText(`${Math.round(progress * 100)}%`, width / 2, y + 35)
 }
 
+
 function startGame(assets) {
   loadingControls.hidden = true
-
   const input = createInput(window)
   window.addEventListener('keydown', audio.unlock)
   window.addEventListener('click', audio.unlock)
+  const net = createNetcode()
 
-  const world = new World()
-  const hud = createHud()
-
-  let ship = world.spawn(new Ship(400, 250))
-  let respawnTimer = null
-
-  const asteroid = world.spawn(
-    new Asteroid(
-      new Vector2(200, 150),
-      new Vector2(60, 40),
-      25,
-      canvas.clientWidth,
-      canvas.clientHeight
-    )
-  )
-
-  asteroid.homing = {
-    targetId: ship.id,
-    turnRate: 1.5
+  const panel = document.createElement('section')
+  panel.className = 'network-panel'
+  panel.innerHTML = `
+    <fieldset><legend>Network simulation</legend>
+      <label>Latency (ms) <input id="net-latency" type="number" min="0" max="1000" value="0"></label>
+      <label>Jitter (ms) <input id="net-jitter" type="number" min="0" max="500" value="0"></label>
+      <label>Drop (%) <input id="net-drop" type="number" min="0" max="100" value="0"></label>
+      <label>Interpolation (ms) <input id="net-interpolation" type="number" min="0" max="300" value="100"></label>
+      <label><input id="net-prediction" type="checkbox" checked> Client prediction</label>
+      <label><input id="net-break" type="checkbox"> Break determinism (M2 demonstration)</label>
+    </fieldset>
+    <pre id="netgraph"></pre>
+  `
+  matchElement.append(panel)
+  const control = id => panel.querySelector(`#${id}`)
+  function configureNetwork() {
+    connection.send({
+      type: 'networkConfig',
+      latency: Number(control('net-latency').value),
+      jitter: Number(control('net-jitter').value),
+      drop: Number(control('net-drop').value),
+    })
   }
+  for (const name of ['net-latency', 'net-jitter', 'net-drop']) control(name).addEventListener('change', configureNetwork)
+  control('net-interpolation').addEventListener('input', e => net.setInterpolationDelay(Number(e.target.value)))
+  control('net-prediction').addEventListener('change', e => net.setPrediction(e.target.checked))
+  control('net-break').addEventListener('change', e => net.setDeterminismBroken(e.target.checked))
+  connection.on('open', configureNetwork)
+  // If the connection opened during asset loading, its configuration defaults to zero.
 
-  world.spawn(new Pickup(300, 200, 'shield'))
-  world.spawn(new Pickup(500, 350, 'rapid-fire'))
-
-  let previousShip = { ...ship }
+  let lastPingAt = 0
+  let rtt = 0
+  let lastTrafficAt = performance.now()
+  let lastTraffic = connection.traffic()
+  let downKib = 0, upKib = 0
+  connection.on('pong', msg => { rtt = performance.now() - msg.sentAt })
+  connection.on('snapshot', snapshot => {
+    if (!net.onSnapshot(snapshot)) return
+    for (const event of snapshot.events ?? []) {
+      gameEvents.dispatchEvent(new CustomEvent(event.type, {detail: event.detail}))
+    }
+  })
 
   const loop = createLoop({
-    simulate(dt) {
-      previousShip = { ...ship }
-
-      if (input.isDown('Space')) {
-        ship.fire(world)
+    step: 1 / 30,
+    simulate() {
+      const now = performance.now()
+      if (now - lastPingAt >= 1000) {
+        lastPingAt = now
+        connection.send({type: 'ping', sentAt: now})
       }
-
-      world.step(dt, input)
-
-      if (!ship.alive && respawnTimer === null) {
-        respawnTimer = 2
+      if (net.playerId) {
+        const turn = Number(input.isDown('ArrowRight')) - Number(input.isDown('ArrowLeft'))
+        connection.send({type: 'input', ...net.step({
+          thrust: input.isDown('ArrowUp'), turn, fire: input.isDown('Space')
+        }, now)})
       }
-
-      if (respawnTimer !== null) {
-        respawnTimer -= dt
-
-        if (respawnTimer <= 0) {
-          for (let attempt = 0; attempt < 100; attempt++) {
-            const x = ship.radius + Math.random() * (canvas.clientWidth - ship.radius * 2)
-            const y = ship.radius + Math.random() * (canvas.clientHeight - ship.radius * 2)
-
-            const safe = [...world.ofKind('asteroid')].every(asteroid => {
-              const dx = x - asteroid.pos.x
-              const dy = y - asteroid.pos.y
-              const minDistance = ship.radius + asteroid.radius + 30
-
-              return dx * dx + dy * dy > minDistance * minDistance
-            })
-
-            if (safe) {
-              ship = world.spawn(new Ship(x, y))
-              respawnTimer = null
-              break
-            }
-          }
-        }
-      }
-
-      wrap(ship, canvas.clientWidth, canvas.clientHeight)
       input.endFrame()
     },
-
     render(alpha, stats) {
       const width = canvas.clientWidth
       const height = canvas.clientHeight
-
+      const now = performance.now()
       ctx.clearRect(0, 0, width, height)
       drawStars(ctx, width, height)
-
-      const interpolatedShip = {
-        ...ship,
-        x: previousShip.pos.x + (ship.pos.x - previousShip.pos.x) * alpha,
-        y: previousShip.pos.y + (ship.pos.y - previousShip.pos.y) * alpha,
-        angle:
-          previousShip.angle +
-          Math.atan2(
-            Math.sin(ship.angle - previousShip.angle),
-            Math.cos(ship.angle - previousShip.angle)
-          ) * alpha,
+      for (const entity of net.render(now, Math.max(0.001, stats.lastFrameDuration / 1000))) {
+        const object = {...entity, pos: {x: entity.x, y: entity.y}, type: entity.pickupType}
+        if (entity.kind === 'ship') drawShip(ctx, object, assets.sprites.game)
+        else if (entity.kind === 'bullet') drawBullet(ctx, object, assets.sprites.game)
+        else if (entity.kind === 'asteroid') drawAsteroid(ctx, object, assets.sprites.game)
+        else if (entity.kind === 'pickup') drawPickup(ctx, object)
       }
-
-      drawShip(ctx, interpolatedShip, assets.sprites.game);
-
-      for (const bullet of world.ofKind('bullet')) {
-        drawBullet(ctx, bullet, assets.sprites.game);
+      const metrics = net.metrics(now)
+      drawHud(ctx, stats, metrics.score)
+      if (now - lastTrafficAt >= 1000) {
+        const traffic = connection.traffic()
+        const seconds = (now - lastTrafficAt) / 1000
+        downKib = (traffic.receivedBytes - lastTraffic.receivedBytes) / 1024 / seconds
+        upKib = (traffic.sentBytes - lastTraffic.sentBytes) / 1024 / seconds
+        lastTraffic = traffic
+        lastTrafficAt = now
       }
-
-      for (const asteroid of world.ofKind('asteroid')) {
-        drawAsteroid(ctx, asteroid, assets.sprites.game);
-      }
-
-      for (const pickup of world.ofKind('pickup')) {
-        drawPickup(ctx, pickup)
-      }
-
-      for (const explosion of world.ofKind('explosion')) {
-        drawExplosion(ctx, explosion)
-      }
-
-      drawHud(ctx, stats, hud.score)
+      control('netgraph').textContent = [
+        `Codec: ${connection.traffic().codec}`,
+        `RTT: ${rtt.toFixed(1)} ms`,
+        `Snapshot age: ${metrics.snapshotAge.toFixed(1)} ms`,
+        `Down: ${downKib.toFixed(2)} KiB/s | Up: ${upKib.toFixed(2)} KiB/s`,
+        `Pending inputs: ${metrics.pending}`,
+        `Reconciliation correction: ${metrics.correction.toFixed(2)} px`,
+        `Interpolation delay: ${metrics.interpolationDelay} ms`,
+        `Server tick: ${metrics.serverTick}`,
+      ].join('\n')
     },
   })
-
   loop.start()
 }
 

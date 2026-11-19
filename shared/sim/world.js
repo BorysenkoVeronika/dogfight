@@ -1,11 +1,21 @@
+import { mulberry32 } from './random.js';
 import { detectCollisions } from './collision.js';
 import { Explosion } from './explosion.js';
 import { updateHoming } from './behaviors/homing.js';
-import { gameEvents } from '../events.js'
+import { createSimulationEvents } from './events.js';
 
 export class World {
+    static fromSnapshot(snapshot) {
+        return structuredClone(snapshot);
+    }
+
     #entities = new Map();
     score = 0;
+    events = createSimulationEvents();
+
+    constructor(seed = 12345) {
+        this.random = mulberry32(seed);
+    }
 
     spawn(entity) {
         this.#entities.set(entity.id, entity);
@@ -46,7 +56,17 @@ export class World {
                 updateHoming(entity, target, dt);
             }
 
-            entity.update(dt, inputs);
+            const input = entity.kind === 'ship'
+                ? inputs instanceof Map
+                    ? inputs.get(entity.id)
+                    : inputs
+                : undefined;
+
+            if (entity.kind === 'ship' && !input) {
+                continue;
+            }
+
+            entity.update(dt, input);
         }
 
         this.#resolveCollisions();
@@ -69,21 +89,17 @@ export class World {
 
                 target.takeDamage(1);
                 bullet.alive = false;
-                gameEvents.dispatchEvent(new Event('hit'))
+                this.events.emit('hit')
 
                 if (target.kind === 'asteroid' && wasAlive && !target.alive) {
                     this.score += 10;
 
-                    gameEvents.dispatchEvent(
-                        new CustomEvent('scoreChanged', {
-                            detail: this.score
-                        })
-                    );
+                    this.events.emit('scoreChanged', this.score);
                 }
 
                 if (target.kind === 'ship' && wasAlive && !target.alive) {
-                    this.spawn(new Explosion(target.pos));
-                    gameEvents.dispatchEvent(new Event('exploded'))
+                    this.spawn(new Explosion(target.pos, 20, this.random));
+                    this.events.emit('exploded')
                 }
             }
 
@@ -97,8 +113,8 @@ export class World {
                 ship.takeDamage(1);
 
                 if (wasAlive && !ship.alive) {
-                    this.spawn(new Explosion(ship.pos));
-                    gameEvents.dispatchEvent(new Event('exploded'))
+                    this.spawn(new Explosion(ship.pos, 20, this.random));
+                    this.events.emit('exploded')
                 }
             }
 

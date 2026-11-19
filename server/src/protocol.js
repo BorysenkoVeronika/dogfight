@@ -1,4 +1,6 @@
 
+import { validateInput } from '@dogfight/shared/protocol/messages';
+
 export const PROTOCOL_VERSION = 0;
 
 export function validateMessage(data) {
@@ -29,6 +31,37 @@ export function validateMessage(data) {
                 data.message.trim().length >= 1 &&
                 data.message.length <= 500
             );
+
+        case 'input':
+            return (
+                Object.keys(data).length === 7 &&
+                validateInput({
+                    seq: data.seq,
+                    tick: data.tick,
+                    thrust: data.thrust,
+                    turn: data.turn,
+                    fire: data.fire,
+                })
+            );
+
+
+        case 'ping':
+            return Object.keys(data).length === 3 && Number.isFinite(data.sentAt) && data.sentAt >= 0;
+
+        case 'networkConfig':
+            return (
+                Object.keys(data).length === 5 &&
+                Number.isFinite(data.latency) &&
+                data.latency >= 0 &&
+                data.latency <= 1000 &&
+                Number.isFinite(data.jitter) &&
+                data.jitter >= 0 &&
+                data.jitter <= 500 &&
+                Number.isFinite(data.drop) &&
+                data.drop >= 0 &&
+                data.drop <= 100
+            );
+
 
         default:
             return false;

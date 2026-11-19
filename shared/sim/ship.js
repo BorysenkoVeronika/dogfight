@@ -1,7 +1,6 @@
 import { Entity } from './entity.js';
 import { Vector2 } from './vector.js';
 import { Bullet } from './bullet.js';
-import { gameEvents } from '../events.js'
 
 export class Ship extends Entity {
 
@@ -53,6 +52,8 @@ export class Ship extends Entity {
             this.angle += rotationSpeed * dt;
         }
 
+        this.angle = Math.atan2(Math.sin(this.angle), Math.cos(this.angle));
+
         this.thrust = input.isDown('ArrowUp');
 
         if (this.thrust) {
@@ -69,6 +70,16 @@ export class Ship extends Entity {
         }
 
         super.update(dt);
+    }
+
+    static fromSnapshot(data) {
+        const ship = new Ship(data.x, data.y);
+        ship.id = data.id;
+        ship.pos = new Vector2(data.x, data.y);
+        ship.vel = new Vector2(data.vx, data.vy);
+        ship.angle = data.angle;
+        ship.radius = data.radius;
+        return ship;
     }
 
     get hp() {
@@ -99,7 +110,7 @@ export class Ship extends Entity {
         }
     }
 
-    fire(world) {
+    fire(world, shotSeq = -1, ownerId = '') {
         if (this.fireCooldown > 0) return;
 
         const direction = Vector2.fromAngle(this.angle);
@@ -113,8 +124,10 @@ export class Ship extends Entity {
 
         const bullet = new Bullet(bulletPosition, bulletVelocity);
 
+        bullet.shotSeq = shotSeq;
+        bullet.ownerId = ownerId;
         world.spawn(bullet);
-        gameEvents.dispatchEvent(new Event('fired'))
+        world.events.emit('fired');
 
         this.fireCooldown = this.rapidFireTime > 0 ? 0.12 : 0.3;
     }

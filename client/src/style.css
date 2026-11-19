@@ -65,3 +65,8 @@ h1 {
 #retry-button[hidden] {
   display: none;
 }
+.network-panel { max-width: 800px; margin: 16px 0; }
+.network-panel fieldset { display: flex; flex-wrap: wrap; gap: 12px; border: 1px solid #555; padding: 12px; }
+.network-panel label { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; }
+.network-panel input[type="number"] { width: 65px; }
+.network-panel pre { font-size: 13px; line-height: 1.5; white-space: pre-wrap; }

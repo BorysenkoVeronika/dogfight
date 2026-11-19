@@ -1,9 +1,10 @@
 
 import { Entity } from './entity.js';
 import { Vector2 } from './vector.js';
+import { mulberry32 } from './random.js';
 
 export class Explosion extends Entity {
-    constructor(pos, count = 20) {
+    constructor(pos, count = 20, random = mulberry32(12345)) {
         super({
             pos,
             radius: 0,
@@ -11,9 +12,9 @@ export class Explosion extends Entity {
         });
 
         this.particles = Array.from({ length: count }, () => {
-            const angle = Math.random() * Math.PI * 2;
-            const speed = 50 + Math.random() * 150;
-            const ttl = 0.3 + Math.random() * 0.7;
+            const angle = random() * Math.PI * 2;
+            const speed = 50 + random() * 150;
+            const ttl = 0.3 + random() * 0.7;
 
             return {
                 pos: new Vector2(pos.x, pos.y),
@@ -22,6 +23,12 @@ export class Explosion extends Entity {
                 maxTtl: ttl,
             };
         });
+    }
+
+    static fromSnapshot(s) {
+        const explosion = new Explosion(new Vector2(s.x, s.y), 0);
+        explosion.id = s.id;
+        return explosion;
     }
 
     update(dt) {
