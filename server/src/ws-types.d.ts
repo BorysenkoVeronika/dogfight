@@ -3,6 +3,9 @@ declare module 'ws' {
  import type {IncomingMessage, Server as HttpServer} from 'node:http';
  export type RawData = Buffer;
  export class WebSocket {
+  static readonly OPEN: number;
+  constructor(address:string);
+  once(event:'open'|'error'|'close',listener:()=>void):this;
   readonly bufferedAmount: number;
   readonly readyState: number;
   on(event: 'message', listener:(data:RawData,isBinary:boolean)=>void):this;

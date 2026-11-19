@@ -1,5 +1,5 @@
 export type LoopStats={stepsPerSecond:number;framesPerSecond:number;lastFrameDuration:number};
-export type LoopConfig={step?:number;simulate(dt:number):void;render(alpha:number,stats:LoopStats):void};
+export type LoopConfig={step?:number;simulate:(dt:number)=>void;render:(alpha:number,stats:LoopStats)=>void};
 export function createLoop({step=1/60,simulate,render}:LoopConfig){
  let running=false;
  let animationId:number|null=null;

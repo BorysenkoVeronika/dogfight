@@ -1,9 +1,26 @@
 export class Vector2 {
-    readonly x: number;
-    readonly y: number;
+    x: number;
+    y: number;
     constructor(x: number = 0, y: number = 0) {
         this.x = x;
         this.y = y;
+    }
+
+    /** Mutation for measured simulation hot paths; pure methods remain unchanged. */
+    addScaledInPlace(x: number, y: number, scalar: number): this {
+        this.x += x * scalar;
+        this.y += y * scalar;
+        return this;
+    }
+    scaleInPlace(scalar: number): this {
+        this.x *= scalar;
+        this.y *= scalar;
+        return this;
+    }
+    setInPlace(x: number, y: number): this {
+        this.x = x;
+        this.y = y;
+        return this;
     }
 
     add(v: Vector2): Vector2 {

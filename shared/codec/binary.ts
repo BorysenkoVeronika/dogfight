@@ -16,7 +16,6 @@ import {assertNever} from '../types.ts';
  * Numeric fields are float32/quantized-angle on the wire; other fields are exact.
  */
 const VERSION = 1;
-const EVENTS: readonly string[] = ['unknown', 'fired', 'hit', 'exploded', 'scoreChanged'];
 const PICKUPS: readonly string[] = ['none', 'shield', 'rapid-fire'];
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();

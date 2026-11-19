@@ -8,6 +8,21 @@ export function circleCircle(a: Entity, b: Entity): boolean {
     return dx * dx + dy * dy <= radius * radius;
 }
 
+/** Swept circle-vs-circle for a fast bullet crossing a target between fixed ticks. */
+export function sweptBulletCollision(a: Entity, b: Entity): boolean {
+    const bullet=a.kind==='bullet'?a:b.kind==='bullet'?b:null;
+    const target=bullet===a?b:a;
+    if(!bullet || !['ship','asteroid'].includes(target.kind))return false;
+    const sx=bullet.previousPos.x,sy=bullet.previousPos.y;
+    const dx=bullet.pos.x-sx,dy=bullet.pos.y-sy;
+    const lengthSq=dx*dx+dy*dy;
+    if(lengthSq===0)return circleCircle(bullet,target);
+    const t=Math.max(0,Math.min(1,((target.pos.x-sx)*dx+(target.pos.y-sy)*dy)/lengthSq));
+    const x=sx+dx*t-target.pos.x,y=sy+dy*t-target.pos.y;
+    const radius=bullet.radius+target.radius;
+    return x*x+y*y<=radius*radius;
+}
+
 export function detectCollisions(world: Iterable<Entity>): Array<[Entity, Entity]> {
     const entities = [...world];
     const collisions: Array<[Entity, Entity]> = [];
@@ -22,7 +37,7 @@ export function detectCollisions(world: Iterable<Entity>): Array<[Entity, Entity
 
             if (!b?.alive) continue;
 
-            if (circleCircle(a, b)) {
+            if (circleCircle(a, b) || sweptBulletCollision(a,b)) {
                 collisions.push([a, b]);
             }
         }

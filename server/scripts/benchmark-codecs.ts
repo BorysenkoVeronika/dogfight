@@ -1,7 +1,7 @@
 import type {Snapshot,GameInput} from '../../shared/types.ts';
 // Measures JSON and binary for a 4-player snapshot at 30 Hz.
 // Run: node --import tsx server/scripts/benchmark-codecs.ts from repository root.
-import { encodeSnapshot, decodeSnapshot, encodeInput, decodeInput } from '../../shared/codec/binary.ts';
+import { encodeSnapshot, decodeSnapshot, encodeInput } from '../../shared/codec/binary.ts';
 import { performance } from 'node:perf_hooks';
 const text = new TextEncoder();
 const playerIds = Array.from({length: 4}, (_, i) => `00000000-0000-4000-8000-${String(i + 1).padStart(12, '0')}`);

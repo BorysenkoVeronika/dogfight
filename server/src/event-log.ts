@@ -129,7 +129,7 @@ export async function closeEventLog() {
 
     const errors = results
         .filter((result) => result.status === 'rejected')
-        .map((result) => result.reason);
+        .map((result) => result.reason as unknown);
 
     if (errors.length > 0) {
         throw new AggregateError(errors, 'Failed to close event logs');

@@ -9,6 +9,7 @@ export class RoomManager {
  #rooms=new Map<string,Room>();
  #matches=new Map<string,Match>();
  onSnapshot?: (room:Room,snapshot:MatchSnapshot)=>void;
+ onRosterChanged?: (room:Room)=>void;
  create(name:string,id:string=`room-${randomUUID()}`):Room{
   if(this.#rooms.size>=MAX_ROOMS){const error=new Error('Room limit reached');Object.assign(error,{statusCode:503});throw error;}
   const room=new Room(id,name);

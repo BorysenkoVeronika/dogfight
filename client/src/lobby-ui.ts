@@ -82,7 +82,8 @@ export function createLobbyUI(lobby:Lobby, root:HTMLElement, onJoin:(data:{playe
         }
     });
 
-    createButton.addEventListener('click', async () => {
+    createButton.addEventListener('click', () => {
+      void (async () => {
         const name = roomNameInput.value.trim();
 
         if (name.length < 3) {
@@ -106,6 +107,7 @@ export function createLobbyUI(lobby:Lobby, root:HTMLElement, onJoin:(data:{playe
         } finally {
             createButton.disabled = false;
         }
+      })();
     });
 
     joinButton.addEventListener('click', () => {

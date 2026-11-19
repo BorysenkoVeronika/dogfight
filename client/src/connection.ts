@@ -19,7 +19,7 @@ export type Connection={
  traffic():{sentBytes:number;receivedBytes:number;codec:'json'|'binary'};
 };
 export function createConnection():Connection{
- const handlers=new Map<ConnectionEventName,Set<Function>>();
+ const handlers=new Map<ConnectionEventName,Set<(data:never)=>void>>();
  let socket:WebSocket|null=null;
  let reconnectAttempts=0;
  let reconnectTimer:ReturnType<typeof setTimeout>|null=null;
@@ -44,12 +44,14 @@ export function createConnection():Connection{
   socket.onopen=()=>{reconnectAttempts=0;if(reconnectTimer)clearTimeout(reconnectTimer);dispatch('open',{type:'open'});};
   socket.onmessage=event=>{
    try{
+    performance.mark('decode:start');
     receivedBytes+=typeof event.data==='string'?new TextEncoder().encode(event.data).length:
      event.data instanceof ArrayBuffer?event.data.byteLength:0;
     let candidate:unknown;
     if(typeof event.data==='string')candidate=JSON.parse(event.data);
     else if(event.data instanceof ArrayBuffer)candidate={v:0,...decodeSnapshot(event.data)};
     else throw new Error('Unexpected WebSocket payload');
+    performance.mark('decode:end');performance.measure('decode','decode:start','decode:end');
     const parsed=parseServerMessage(candidate);
     if(!parsed.ok)throw new Error(parsed.error);
     const data=parsed.value;
@@ -74,7 +76,7 @@ export function createConnection():Connection{
   };
  }
  function on<K extends ConnectionEventName>(type:K,callback:(data:ConnectionEvents[K])=>void):()=>void{
-  const set=handlers.get(type)??new Set<Function>();set.add(callback);handlers.set(type,set);
+  const set=handlers.get(type)??new Set<(data:never)=>void>();set.add(callback);handlers.set(type,set);
   return ()=>{set.delete(callback);};
  }
  function disconnect():void{

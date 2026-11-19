@@ -1,5 +1,6 @@
 import type {IncomingMessage, ServerResponse} from 'node:http';
 import {CreateRoomRequestSchema} from '@dogfight/shared/protocol';
+import { performance as nodePerformance } from 'node:perf_hooks';
 import { createReadStream } from 'node:fs';
 import { pipeline } from 'node:stream/promises';
 import { getReplayPath, getReplaySize } from './replay.ts';
@@ -37,9 +38,10 @@ const mimeTypes: Record<string,string> = {
 
 async function readBody(req: IncomingMessage, maxBytes: number = 1024): Promise<string> {
     let size = 0;
-    const chunks = [];
+    const chunks: Buffer[] = [];
 
-    for await (const chunk of req) {
+    for await (const rawChunk of req) {
+        const chunk: Buffer = Buffer.isBuffer(rawChunk) ? rawChunk : Buffer.from(rawChunk as Uint8Array);
         size += chunk.length;
 
         if (size > maxBytes) {
@@ -92,8 +94,29 @@ async function serveStatic(req: IncomingMessage, res: ServerResponse): Promise<v
     }
 }
 
-const server = createServer(async (req, res) => {
+const server = createServer((req, res) => {
+  void (async () => {
 
+    const botRoute = /^\/api\/rooms\/([a-zA-Z0-9_-]+)\/bots$/.exec(req.url ?? '');
+    if (req.method === 'POST' && botRoute) {
+        try {
+            const room = roomManager.get(botRoute[1] ?? '');
+            const match = room && roomManager.getMatch(room.id);
+            if (!match) { res.writeHead(404);res.end('Room not found');return; }
+            const raw:unknown = JSON.parse(await readBody(req));
+            const count:unknown = raw && typeof raw === 'object' && 'count' in raw ? raw.count : undefined;
+            if (typeof count !== 'number' || !Number.isInteger(count) || count < 1 || count > 8) { res.writeHead(400);res.end('Invalid bot count');return; }
+            const bots = match.addBots(count);
+            roomManager.onRosterChanged?.(room);
+            res.writeHead(201, {'Content-Type':'application/json'});
+            res.end(JSON.stringify({bots}));
+        } catch (error) {
+            const status=error instanceof SyntaxError||error instanceof RangeError?400:500;
+            res.writeHead(status,{'Content-Type':'application/json'});
+            res.end(JSON.stringify({error:status===400?'Invalid bot request':'Internal server error'}));
+        }
+        return;
+    }
     if (req.method === 'GET' && req.url === '/api/stats') {
         res.writeHead(200, {
             'Content-Type': 'application/json; charset=utf-8',
@@ -101,6 +124,8 @@ const server = createServer(async (req, res) => {
 
         res.end(JSON.stringify({
             matches: roomManager.getStats(),
+            eventLoopUtilization: nodePerformance.eventLoopUtilization().utilization,
+            rssBytes: process.memoryUsage().rss,
         }));
 
         return;
@@ -240,6 +265,11 @@ const server = createServer(async (req, res) => {
     });
 
     res.end(JSON.stringify({ error: 'Not Found' }));
+  })().catch((error:unknown) => {
+    console.error('HTTP request failed:', error);
+    if (!res.headersSent) res.writeHead(500);
+    if (!res.writableEnded) res.end('Internal Server Error');
+  });
 });
 
 const wss = createWebSocketServer(server, roomManager);
@@ -269,7 +299,8 @@ function shutdown(signal: string): void {
             process.exitCode = 1;
         }
 
-        server.close(async (httpError) => {
+        server.close((httpError) => {
+          void (async () => {
             if (httpError) {
                 console.error('Error closing HTTP server:', httpError);
                 process.exitCode = 1;
@@ -286,6 +317,7 @@ function shutdown(signal: string): void {
             if (!httpError && !wsError) {
                 console.log('Server closed successfully.');
             }
+          })().catch((error:unknown) => { console.error('Server cleanup failed:',error); process.exitCode=1; });
         });
 
         server.closeIdleConnections();

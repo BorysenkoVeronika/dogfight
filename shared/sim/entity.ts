@@ -6,6 +6,8 @@ export class Entity {
     static #id = 0;
     id: EntityId;
     pos: Vector2;
+    /** Last position retained for swept bullet collision checks. */
+    previousPos: Vector2;
     vel: Vector2;
     angle: number;
     radius: number;
@@ -24,6 +26,7 @@ export class Entity {
     }: {pos?: Vector2;vel?: Vector2;angle?: number;radius?: number;kind?: EntityKind} = {}) {
         this.id = entityId(++Entity.#id);
         this.pos = pos;
+        this.previousPos = new Vector2(pos.x, pos.y);
         this.vel = vel;
         this.angle = angle;
         this.radius = radius;
@@ -32,6 +35,8 @@ export class Entity {
     }
 
     update(dt: number, _input?: KeyInput): void {
-        this.pos = this.pos.add(this.vel.scale(dt));
+        void _input;
+        this.previousPos.setInPlace(this.pos.x,this.pos.y);
+        this.pos.addScaledInPlace(this.vel.x, this.vel.y, dt);
     }
 }

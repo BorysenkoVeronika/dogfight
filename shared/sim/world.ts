@@ -40,6 +40,8 @@ export class World implements Iterable<Entity> {
             const bullet = a.kind === 'bullet' ? a : b.kind === 'bullet' ? b : null;
             const target = bullet === a ? b : a;
             if (bullet && (target instanceof Ship || target instanceof Asteroid)) {
+                // A projectile must never damage the ship that fired it.
+                if (target instanceof Ship && bullet.ownerId && bullet.ownerId === target.ownerId) continue;
                 const wasAlive = target.alive;
                 target.takeDamage(1);bullet.alive = false;
                 this.events.emit('hit',null);

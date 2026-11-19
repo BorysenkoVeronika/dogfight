@@ -61,16 +61,15 @@ export class Ship extends Entity {
         this.thrust = input.isDown('ArrowUp');
 
         if (this.thrust) {
-            const direction = Vector2.fromAngle(this.angle);
-            this.vel = this.vel.add(direction.scale(acceleration * dt));
+            this.vel.addScaledInPlace(Math.cos(this.angle), Math.sin(this.angle), acceleration * dt);
         }
 
-        this.vel = this.vel.scale(Math.pow(drag, dt * 60));
+        this.vel.scaleInPlace(Math.pow(drag, dt * 60));
 
         const speed = this.vel.length();
 
         if (speed > maxSpeed) {
-            this.vel = this.vel.normalize().scale(maxSpeed);
+            this.vel.scaleInPlace(1 / speed).scaleInPlace(maxSpeed);
         }
 
         super.update(dt);

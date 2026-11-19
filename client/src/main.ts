@@ -13,6 +13,8 @@ import {createConnection} from './connection.ts';
 import type {Connection} from './connection.ts';
 import type {RoomInfo} from '@dogfight/shared/protocol';
 import {createNetcode} from './netcode.ts';
+import {collectFrame,frameReport,downloadFrameSamples} from './frame-samples.ts';
+import {compareReplayWorker} from './worker-benchmark.ts';
 import {drawShip,drawStars,drawHud,drawBullet,drawAsteroid,drawPickup} from './render/draw.ts';
 
 const app=document.querySelector('#app');
@@ -90,6 +92,7 @@ function startGame(assets:LoadedAssets):void{
  window.addEventListener('keydown',audio.unlock);
  window.addEventListener('click',audio.unlock);
  const net=createNetcode();
+ if((import.meta as ImportMeta & {env:{DEV:boolean}}).env.DEV)Object.assign(window,{dogfightDebug:{entities:()=>net.render(performance.now(),1/60),playerId:()=>net.playerId}});
  const panel=document.createElement('section');panel.className='network-panel';
  panel.innerHTML=`
   <fieldset><legend>Network simulation</legend>
@@ -131,9 +134,12 @@ function startGame(assets:LoadedAssets):void{
    }
   }
  });
+ // Profiling controls are only for lab measurements, not game networking.
+ Object.assign(window,{dogfightProfile:{frameReport,downloadFrameSamples},dogfightWorkerBenchmark:compareReplayWorker});
  const loop=createLoop({
   step:1/30,
   simulate(){
+   performance.mark('simulate:start');
    const now=performance.now();
    if(now-lastPingAt>=1000){lastPingAt=now;conn.send({type:'ping',sentAt:now});}
    if(net.playerId){
@@ -141,8 +147,11 @@ function startGame(assets:LoadedAssets):void{
     conn.send({type:'input',...net.step({thrust:input.isDown('ArrowUp'),turn,fire:input.isDown('Space')},now)});
    }
    input.endFrame();
+   performance.mark('simulate:end');performance.measure('simulate','simulate:start','simulate:end');
   },
   render(_alpha,stats){
+   collectFrame(stats.lastFrameDuration);
+   performance.mark('render:start');
    const width=canvas.clientWidth,height=canvas.clientHeight,now=performance.now();
    ctx.clearRect(0,0,width,height);drawStars(ctx,width,height);
    for(const entity of net.render(now,Math.max(0.001,stats.lastFrameDuration/1000))){
@@ -173,6 +182,7 @@ function startGame(assets:LoadedAssets):void{
     `Interpolation delay: ${metrics.interpolationDelay} ms`,
     `Server tick: ${metrics.serverTick}`,
    ].join('\n');
+   performance.mark('render:end');performance.measure('render','render:start','render:end');
   },
  });
  loop.start();

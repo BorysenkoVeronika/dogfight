@@ -43,46 +43,34 @@ The project explores JavaScript fundamentals, the event loop, fixed-timestep sim
 
 ```text
 dogfight/
-├── .github/workflows/typecheck.yml    # CI: typecheck and tests
 ├── client/
-│   ├── public/                      # Images, audio, and static room JSON
 │   ├── src/
-│   │   ├── assets/loader.ts
-│   │   ├── render/{canvas,draw}.ts
-│   │   ├── connection.ts            # Typed client WebSocket boundary
-│   │   ├── netcode.ts               # Prediction/reconciliation/interpolation
-│   │   ├── lobby.ts, lobby-ui.ts
-│   │   ├── input.ts, loop.ts, audio.ts, events.ts, hud.ts
-│   │   └── main.ts
-│   ├── index.html
-│   ├── vite.config.ts
-│   └── tsconfig.json
+│   │   ├── main.ts, loop.ts, netcode.ts, reconcile.ts
+│   │   ├── profiling.ts, frame-samples.ts
+│   │   ├── replay-worker.ts, worker-benchmark.ts
+│   │   ├── connection.ts, lobby.ts, audio.ts
+│   │   ├── assets/, render/
+│   │   └── ...
+│   ├── tests/
+│   └── public/
 ├── server/
-│   ├── scripts/benchmark-codecs.ts
 │   ├── src/
-│   │   ├── index.ts                 # HTTP API
-│   │   ├── ws.ts                    # Typed WebSocket server
-│   │   ├── match.ts                 # 30 Hz authoritative simulation
-│   │   ├── room.ts, room-manager.ts
-│   │   ├── config.ts                # Zod environment schema
-│   │   ├── event-log.ts, replay.ts
-│   │   └── ws-types.d.ts
-│   ├── .env.example
-│   └── tsconfig.json
+│   │   ├── index.ts, ws.ts, match.ts, room-manager.ts
+│   │   ├── bot.ts, token-bucket.ts, heartbeat.ts
+│   │   └── ...
+│   ├── scripts/
+│   │   ├── engine-bench.ts, simulation-benchmark.ts
+│   │   └── load-test.ts
+│   └── tests/
 ├── shared/
-│   ├── types.ts                     # Discriminated snapshots / branded IDs
-│   ├── protocol.ts                  # Zod schemas and parsed message types
-│   ├── codec/{index,binary,json}.ts # Codec interface + implementations
-│   ├── sim/                         # Typed deterministic simulation
-│   │   ├── bus.ts                   # Generic event bus
-│   │   ├── world.ts, ship.ts, vector.ts, entity.ts
-│   │   └── other simulation modules (.ts)
-│   ├── tests/                       # Codec, determinism, schema tests
-│   └── tsconfig.json
+│   ├── sim/, codec/, tests/
+│   ├── protocol.ts
+│   └── types.ts
+├── e2e/two-players.spec.ts
 ├── docs/lab04-m3-rss.png
-├── tsconfig.base.json
-├── tsconfig.json
-├── package.json                     # npm workspaces and scripts
+├── .github/workflows/ci.yml
+├── vitest.config.ts, playwright.config.ts
+├── eslint.config.mjs
 └── README.md
 ```
 
@@ -770,15 +758,7 @@ These experiments demonstrate why EventEmitter error listeners and Promise rejec
 
 ## Technologies
 
-- **TypeScript (strict mode)** — typed client, server and shared simulation; checked with `tsc --noEmit`.
-- **Zod 4** — runtime schema validation and inferred wire-message types.
-- **Node.js / `tsx`** — TypeScript server, 30 Hz authoritative match loop, HTTP APIs, streams, and test runner.
-- **WebSockets (`ws`)** — real-time input/snapshot synchronization; JSON and binary protocols.
-- **`ArrayBuffer` / `DataView`** — validated versioned binary codec with explicit little-endian layout.
-- **Vite, HTML5 Canvas, Web Audio API** — TypeScript client build, rendering, and sound.
-- **npm workspaces** — `client`, `server`, and `shared` packages.
-- **ESLint / Prettier** — source formatting and lint tooling.
-- **GitHub Actions** — typecheck and regression tests on push and pull requests.
+JavaScript / TypeScript (strict), Node.js, Vite, npm workspaces, HTML5 Canvas, Web Audio API, WebSocket (`ws`), Zod, Node.js Streams, `DataView`, `ArrayBuffer`, Vitest, fast-check, Playwright, ESLint (type-checked), Prettier, Chrome DevTools, Web Workers, and GitHub Actions.
 
 ## Lab 05 — Real-Time Networking
 
@@ -874,3 +854,61 @@ The project includes TypeScript type-checking, codec and determinism tests, prot
 The existing three codec/determinism regression tests passed in Node.js 22.16.0, including the deterministic state hash `04d96aea`.
 
 A synthetic snapshot benchmark measured JSON at 680 bytes and binary at 310 bytes, equivalent to approximately 19.92 KiB/s versus 9.08 KiB/s per client at 30 Hz. These figures describe the synthetic benchmark rather than live match traffic.
+
+## Lab 07 — Engine Performance and Testing
+
+[![Lab 07 CI](https://github.com/BorysenkoVeronika/dogfight/actions/workflows/ci.yml/badge.svg)](https://github.com/BorysenkoVeronika/dogfight/actions/workflows/ci.yml)
+
+### Testing and CI
+
+- Root `npm test` executes Vitest with V8 coverage thresholds configured for shared modules (85% minimum).
+- Vector operations, fixed-step ship movement, collisions, deterministic simulation, pure reconciliation, token-bucket rate limiting, accumulator loop and heartbeat have focused unit tests.
+- Five fast-check properties exercise the binary codec, packet length, malformed buffers, bounded arena movement, and parser acceptance/rejection.
+- Playwright opens two Chromium contexts and checks room roster, cross-client movement and chat.
+- GitHub Actions runs typecheck, type-checked ESLint, unit tests/coverage, build, and Chromium E2E.
+
+### Profiling methodology
+
+The client uses `performance.mark/measure` spans for `simulate`, `render`, `decode` and `reconcile`. In a running game, `window.dogfightProfile.frameReport()` returns p50/p95/p99 from frame samples; `window.dogfightProfile.downloadFrameSamples()` exports a CSV. Chrome Performance and Memory traces provide GC pauses, allocator rankings and flame-chart screenshots. The server's `/api/stats` also includes tick p99, RSS bytes and event-loop utilization.
+
+### V8 shape microbenchmark (Node.js 22.16.0, Linux)
+
+100 runs after warm-up; milliseconds. These are synthetic benchmark results, not game frame times.
+
+| Access pattern | Median | p95 | p99 |
+|---|---:|---:|---:|
+| Same object shape | 0.756 | 0.975 | 1.074 |
+| Mixed object shapes | 0.805 | 0.914 | 1.011 |
+| Float32Array iteration | 0.965 | 1.109 | 2.142 |
+
+A typed array did **not** win this particular iteration benchmark. The measurement does not justify changing all entity storage to typed arrays.
+
+### Simulation hot path: in-place vectors
+
+Measured 24 runs of 100,000 fixed-step ship updates following warm-up. Values in milliseconds; environment: Node.js 22.16.0, Linux.
+
+| Implementation | Median | p95 | p99 |
+|---|---:|---:|---:|
+| Allocating Vector2 methods | 17.61 | 18.64 | 19.12 |
+| Reusing vectors in hot paths (including swept collision state) | 14.94 | 16.82 | 17.28 |
+
+The median improved, while tail latencies varied across runs; the table records the final implementation after adding swept bullet collision state. The deterministic simulation hash remained `04d96aea`. Pure `Vector2` methods are still available; explicit in-place methods are used in hot paths. Swept bullet collision checks cover targets crossed between ticks.
+
+### Bots, worker and load measurement
+
+- Server-side AI uses the same input format as a human; `POST /api/rooms/:id/bots` with `{ "count": N }` inserts up to the room capacity.
+- `window.dogfightWorkerBenchmark()` compares NDJSON replay parsing in the browser main thread against a worker using a transferred ArrayBuffer; the worker is an experiment and is not enabled in the game loop by default.
+- `npm run bench:load` ramps headless WebSocket clients at 8, 32, 64 and 128, collecting tick p99, event-loop utilization, RSS and inbound bytes/s in `load-results.csv`. Existing room/server caps can reject some connections; rejected clients must not be counted as server capacity.
+
+### Development commands
+
+```bash
+npm install
+npm run typecheck
+npm run lint
+npm test
+npm run build
+npm run test:e2e
+npm run bench:engine
+npm run bench:load
+```

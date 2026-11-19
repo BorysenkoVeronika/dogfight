@@ -2,6 +2,8 @@ import { WebSocketServer } from 'ws';
 import type {WebSocket} from 'ws';
 import type {Server} from 'node:http';
 import {randomUUID} from 'node:crypto';
+import { TokenBucket } from './token-bucket.ts';
+import { Heartbeat } from './heartbeat.ts';
 import {parseClientMessage} from '@dogfight/shared/protocol';
 import type {ClientMessage} from '@dogfight/shared/protocol';
 import type {Snapshot} from '@dogfight/shared/types';
@@ -14,7 +16,7 @@ const PROTOCOL_VERSION=0;
 const MAX_BUFFERED_BYTES=64*1024;
 const MAX_PLAYERS_PER_ROOM=8;
 type NetworkConfig={latency:number;jitter:number;drop:number};
-type Session={player:Player|null;room:Room|null;codec:'json'|'binary';networkConfig:NetworkConfig;networkTimers:Set<ReturnType<typeof setTimeout>>;tokens:number;inputTokens:number;lastRefill:number;missedPongs:number;joinTimeout:ReturnType<typeof setTimeout>};
+type Session={player:Player|null;room:Room|null;codec:'json'|'binary';networkConfig:NetworkConfig;networkTimers:Set<ReturnType<typeof setTimeout>>;generalBucket:TokenBucket;inputBucket:TokenBucket;heartbeat:Heartbeat;joinTimeout:ReturnType<typeof setTimeout>};
 export function createWebSocketServer(server:Server,roomManager:RoomManager):WebSocketServer {
  const wss=new WebSocketServer({server,path:'/ws',maxPayload:4096});
  const states=new WeakMap<WebSocket,Session>();
@@ -35,6 +37,7 @@ export function createWebSocketServer(server:Server,roomManager:RoomManager):Web
   const payload=JSON.stringify({v:PROTOCOL_VERSION,type:'roster',players:[...room.players.values()]});
   for(const socket of wss.clients)if(states.get(socket)?.room===room)send(socket,payload,true);
  }
+ roomManager.onRosterChanged=broadcastRoster;
  roomManager.onSnapshot=(room,snapshot)=>{
   for(const socket of wss.clients){
    const state=states.get(socket);
@@ -46,17 +49,10 @@ export function createWebSocketServer(server:Server,roomManager:RoomManager):Web
   }
  };
  wss.on('connection',(socket,request)=>{
-  const session:Session={player:null,room:null,codec:new URL(request.url??'/', 'http://localhost').searchParams.get('codec')==='json'?'json':'binary',networkConfig:{latency:0,jitter:0,drop:0},networkTimers:new Set(),tokens:10,inputTokens:40,lastRefill:performance.now(),missedPongs:0,joinTimeout:setTimeout(()=>{if(!session.room)socket.close(1008,'Join timeout');},5000)};
+  const session:Session={player:null,room:null,codec:new URL(request.url??'/', 'http://localhost').searchParams.get('codec')==='json'?'json':'binary',networkConfig:{latency:0,jitter:0,drop:0},networkTimers:new Set(),generalBucket:new TokenBucket(10,10),inputBucket:new TokenBucket(40,40),heartbeat:new Heartbeat(),joinTimeout:setTimeout(()=>{if(!session.room)socket.close(1008,'Join timeout');},5000)};
   states.set(socket,session);
-  function consumeToken(input:boolean):boolean{
-   const now=performance.now();const elapsed=(now-session.lastRefill)/1000;session.lastRefill=now;
-   session.tokens=Math.min(10,session.tokens+elapsed*10);
-   session.inputTokens=Math.min(40,session.inputTokens+elapsed*40);
-   if(input){if(session.inputTokens<1)return false;session.inputTokens--;}
-   else{if(session.tokens<1)return false;session.tokens--;}
-   return true;
-  }
-  socket.on('pong',()=>{session.missedPongs=0;});
+  function consumeToken(input:boolean):boolean { return (input ? session.inputBucket : session.generalBucket).consume(); }
+  socket.on('pong',()=>{session.heartbeat.pong();});
   socket.on('error',error=>console.error('WebSocket error:',error));
   socket.on('message',(raw,isBinary)=>{
    let candidate:unknown;
@@ -119,8 +115,8 @@ export function createWebSocketServer(server:Server,roomManager:RoomManager):Web
   for(const socket of wss.clients){
    const state=states.get(socket);
    if(!state || socket.readyState!==1)continue;
-   if(state.missedPongs>=2){socket.terminate();continue;}
-   state.missedPongs++;socket.ping();
+   if(!state.heartbeat.ping()){socket.terminate();continue;}
+   socket.ping();
   }
  },15000);
  wss.on('close',()=>clearInterval(heartbeat));

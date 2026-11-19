@@ -1,4 +1,5 @@
 import {Ship} from '@dogfight/shared/sim/ship';
+import {reconcileShip} from './reconcile.ts';
 import {inputAdapter} from '@dogfight/shared/sim/input';
 import {wrap} from '@dogfight/shared/sim/arena';
 import {Vector2} from '@dogfight/shared/sim/vector';
@@ -35,6 +36,7 @@ export function createNetcode(){
   if(determinismBroken)ship.pos=new Vector2(ship.pos.x+Math.random()*0.5,ship.pos.y);
  }
  function onSnapshot(snapshot:Snapshot,arrival:number=performance.now()):boolean{
+  performance.mark('reconcile:start');
   if(snapshot.tick<=previousTick)return false;
   previousTick=snapshot.tick;serverTick=snapshot.tick;lastArrival=arrival;
   playerId=snapshot.playerId;seed=snapshot.seed??seed;score=snapshot.score??score;
@@ -48,11 +50,13 @@ export function createNetcode(){
   }
   const before=predicted?{x:predicted.pos.x,y:predicted.pos.y}:{x:own.x,y:own.y};
   acknowledged=Math.max(acknowledged,snapshot.lastProcessedSeq);
-  inputQueue=inputQueue.filter(entry=>entry.seq>acknowledged);
-  predicted=makeShip(own);
-  if(predictionEnabled)for(const entry of inputQueue)apply(predicted,entry);
+  const reconciled=reconcileShip(own,inputQueue,acknowledged);
+  inputQueue=reconciled.pending;
+  predicted=predictionEnabled?reconciled.ship:makeShip(own);
+  if(determinismBroken&&predictionEnabled)predicted.pos=new Vector2(predicted.pos.x+Math.random()*.5,predicted.pos.y);
   correction=Math.hypot(predicted.pos.x-before.x,predicted.pos.y-before.y);
   correctionHistory.push({tick:snapshot.tick,pixels:correction});if(correctionHistory.length>1000)correctionHistory.shift();
+  performance.mark('reconcile:end');performance.measure('reconcile','reconcile:start','reconcile:end');
   return true;
  }
  function step(input:Required<InputState>,now:number):GameInput{
@@ -65,7 +69,7 @@ export function createNetcode(){
    const dir=Vector2.fromAngle(predicted.angle);
    const pos=predicted.pos.add(dir.scale(predicted.radius+3));
    const vel=predicted.vel.add(dir.scale(500));
-   predictedBullets.push({id:-seq,ownerId:playerId??undefined,shotSeq:seq,kind:'bullet',x:pos.x,y:pos.y,vx:vel.x,vy:vel.y,angle:predicted.angle,radius:3,bornAt:now});
+   predictedBullets.push({id:-Number(seq),ownerId:playerId??undefined,shotSeq:seq,kind:'bullet',x:pos.x,y:pos.y,vx:vel.x,vy:vel.y,angle:predicted.angle,radius:3,bornAt:now});
    localFireCooldown=0.3;
   }
   for(const bullet of predictedBullets){

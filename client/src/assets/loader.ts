@@ -4,12 +4,13 @@ type LoadOptions={ctx:AudioContext;onProgress?:(progress:number,completed:number
 type RetryOptions={attempts?:number;baseMs?:number;signal?:AbortSignal};
 type LoadResult={category:'sprites';name:string;value:HTMLImageElement} | {category:'sounds';name:string;value:AudioBuffer} | {category:'arena';name:string;value:unknown};
 function createAbortError():DOMException{return new DOMException('The operation was aborted','AbortError');}
+function abortReason(signal?:AbortSignal):Error{return signal?.reason instanceof Error ? signal.reason : createAbortError();}
 function checkAbort(signal?:AbortSignal):void{if(signal?.aborted)throw signal.reason??createAbortError();}
 function delay(ms:number,signal?:AbortSignal):Promise<void>{
  return new Promise<void>((resolve,reject)=>{
   checkAbort(signal);
   const timer=setTimeout(()=>{signal?.removeEventListener('abort',onAbort);resolve();},ms);
-  function onAbort(){clearTimeout(timer);reject(signal?.reason??createAbortError());}
+  function onAbort(){clearTimeout(timer);reject(abortReason(signal));}
   signal?.addEventListener('abort',onAbort,{once:true});
  });
 }
@@ -39,7 +40,7 @@ export function loadImage(url:string,signal?:AbortSignal):Promise<HTMLImageEleme
  const image=new Image();
  return new Promise<HTMLImageElement>((resolve,reject)=>{
   function cleanup(){image.onload=null;image.onerror=null;signal?.removeEventListener('abort',onAbort);}
-  function onAbort(){cleanup();image.src='';reject(signal?.reason??createAbortError());}
+  function onAbort(){cleanup();image.src='';reject(abortReason(signal));}
   image.onload=()=>{cleanup();resolve(image);};
   image.onerror=()=>{cleanup();reject(new Error(`Failed to load image ${url}`));};
   signal?.addEventListener('abort',onAbort,{once:true});

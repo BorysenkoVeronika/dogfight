@@ -15,22 +15,21 @@
       "DOM",
       "DOM.Iterable"
     ],
-    "baseUrl": ".",
     "paths": {
       "@dogfight/shared/sim/*": [
-        "shared/sim/*.ts"
+        "./shared/sim/*.ts"
       ],
       "@dogfight/shared/codec/*": [
-        "shared/codec/*.ts"
+        "./shared/codec/*.ts"
       ],
       "@dogfight/shared/protocol/*": [
-        "shared/protocol/*.ts"
+        "./shared/protocol/*.ts"
       ],
       "@dogfight/shared/protocol": [
-        "shared/protocol.ts"
+        "./shared/protocol.ts"
       ],
       "@dogfight/shared/types": [
-        "shared/types.ts"
+        "./shared/types.ts"
       ]
     }
   }

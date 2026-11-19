@@ -15,7 +15,15 @@
     "test:lab05": "node --import tsx --test shared/tests/*.test.ts",
     "bench:lab05": "node --import tsx server/scripts/benchmark-codecs.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p shared/tsconfig.json && tsc --noEmit -p server/tsconfig.json && tsc --noEmit -p client/tsconfig.json",
-    "test:lab06": "node --import tsx --test shared/tests/*.test.ts"
+    "test:lab06": "node --import tsx --test shared/tests/*.test.ts",
+    "test": "vitest run --coverage",
+    "test:unit": "vitest run",
+    "test:e2e": "playwright test",
+    "lint": "eslint .",
+    "format:check": "prettier --check \"**/*.{ts,tsx,json,md}\"",
+    "bench:load": "node --import tsx server/scripts/load-test.ts",
+    "bench:engine": "node --import tsx server/scripts/engine-bench.ts",
+    "bench:load:chart": "node --import tsx server/scripts/plot-load.ts"
   },
   "overrides": {
     "minimatch": "^11.0.1"
@@ -23,6 +31,15 @@
   "devDependencies": {
     "typescript": "^5.9.3",
     "tsx": "^4.20.6",
-    "@types/node": "^22.15.0"
+    "@types/node": "^22.15.0",
+    "vitest": "^3.2.4",
+    "@vitest/coverage-v8": "^3.2.4",
+    "fast-check": "^4.2.0",
+    "@playwright/test": "^1.55.0",
+    "eslint": "^9.35.0",
+    "typescript-eslint": "^8.44.0",
+    "@eslint/js": "^9.35.0",
+    "globals": "^16.3.0",
+    "prettier": "^3.6.2"
   }
 }
