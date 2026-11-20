@@ -21,7 +21,7 @@ const app=document.querySelector('#app');
 if(!app)throw new Error('Missing #app root');
 app.innerHTML=`
   <main>
-    <h1>Dogfight</h1>
+    <h1>Dogfight <small id="build-version"></small></h1>
     <section id="lobby"></section>
     <section id="match-ui" hidden></section>
     <div id="loading-controls" hidden>
@@ -31,6 +31,10 @@ app.innerHTML=`
     </div>
     <canvas id="game" hidden></canvas>
   </main>`;
+
+const buildLabel=document.querySelector('#build-version');
+if(buildLabel)buildLabel.textContent=`v${(import.meta as ImportMeta & {env:{VITE_BUILD_SHA?:string}}).env.VITE_BUILD_SHA ?? 'development'}`;
+if('serviceWorker' in navigator)window.addEventListener('load',()=>{void navigator.serviceWorker.register('/sw.js').catch(()=>{});});
 
 function required<T extends HTMLElement>(selector:string,ctor:new()=>T):T{
  const element=document.querySelector(selector);
@@ -59,6 +63,8 @@ createLobbyUI(lobby,lobbyElement,({playerName,room})=>{
  const conn=createConnection();connection=conn;
  createMatchUI(matchElement,conn);
  conn.on('open',()=>{conn.send({type:'join',roomId:room.id,playerName});});
+ conn.on('shutdown',({message})=>{const status=matchElement.querySelector('#connection-status');if(status)status.textContent=message;});
+ conn.on('close',({code})=>{if(code===1001){const status=matchElement.querySelector('#connection-status');if(status)status.textContent='Server restarting. Reconnecting to lobby...';window.setTimeout(()=>window.location.reload(),1800);}});
  conn.on('failed',()=>{
   const status=matchElement.querySelector('#connection-status');
   if(status)status.textContent='Unable to join room. Please reload and try again.';

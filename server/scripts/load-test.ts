@@ -4,6 +4,7 @@ import {encodeInput} from '@dogfight/shared/codec/binary';
 import {writeFile} from 'node:fs/promises';
 const base=process.env.LOAD_URL??'http://127.0.0.1:3000';
 const runMs=Number(process.env.LOAD_DURATION_MS??'10000');
+const origin=process.env.LOAD_ORIGIN??new URL(base).origin;
 const rows:Record<string,string|number>[]=[];
 const sleep=(ms:number)=>new Promise<void>(resolve=>setTimeout(resolve,ms));
 async function createRooms(n:number):Promise<string[]> {
@@ -21,7 +22,7 @@ async function scenario(n:number):Promise<void>{
  let accepted=0,refused=0,bytes=0;
  for(let i=0;i<n;i++){
   const room=rooms[Math.floor(i/8)];if(!room){refused++;continue;}
-  const socket=new WebSocket(base.replace(/^http/,'ws')+'/ws?codec=binary');sockets.push(socket);
+  const socket=new WebSocket(base.replace(/^http/,'ws')+'/ws?codec=binary',{origin});sockets.push(socket);
   socket.on('message',(msg:RawData)=>{bytes+=msg.length;});
   socket.on('error',()=>{});
   await new Promise<void>(resolve=>{

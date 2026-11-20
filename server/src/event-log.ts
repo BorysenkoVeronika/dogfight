@@ -107,7 +107,7 @@ export function logRoomEvents(room: Room): void {
         record('chat', {
             playerId: player.id,
             playerName: player.name,
-            message,
+            messageLength: message.length,
         });
     });
 

@@ -33,3 +33,6 @@ test-results/
 *.cpuprofile
 *.heapprofile
 *.log
+
+chaos-results.json
+load-results.csv

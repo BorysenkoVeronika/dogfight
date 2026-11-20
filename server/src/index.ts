@@ -1,5 +1,7 @@
 import type {IncomingMessage, ServerResponse} from 'node:http';
 import {CreateRoomRequestSchema} from '@dogfight/shared/protocol';
+import {logger,metrics} from './observability.ts';
+import {buildVersion} from './version.ts';
 import { performance as nodePerformance } from 'node:perf_hooks';
 import { createReadStream } from 'node:fs';
 import { pipeline } from 'node:stream/promises';
@@ -34,6 +36,7 @@ const mimeTypes: Record<string,string> = {
     '.jpeg': 'image/jpeg',
     '.ico': 'image/x-icon',
     '.wav': 'audio/wav',
+    '.webmanifest': 'application/manifest+json; charset=utf-8',
 };
 
 async function readBody(req: IncomingMessage, maxBytes: number = 1024): Promise<string> {
@@ -97,8 +100,22 @@ async function serveStatic(req: IncomingMessage, res: ServerResponse): Promise<v
 const server = createServer((req, res) => {
   void (async () => {
 
+    if (req.method === 'GET' && req.url === '/health') {
+        res.writeHead(200, {'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});
+        res.end(JSON.stringify({status:'ok',version:buildVersion}));return;
+    }
+    if (req.method === 'GET' && req.url === '/ready') {
+        res.writeHead(shuttingDown?503:200, {'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});
+        res.end(JSON.stringify({status:shuttingDown?'shutting_down':'ready',version:buildVersion}));return;
+    }
+    if (req.method === 'GET' && req.url === '/metrics') {
+        res.writeHead(200, {'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});
+        res.end(JSON.stringify(metrics(roomManager)));return;
+    }
+    if(shuttingDown){res.writeHead(503);res.end('Server shutting down');return;}
+
     const botRoute = /^\/api\/rooms\/([a-zA-Z0-9_-]+)\/bots$/.exec(req.url ?? '');
-    if (req.method === 'POST' && botRoute) {
+    if (config.nodeEnv !== 'production' && req.method === 'POST' && botRoute) {
         try {
             const room = roomManager.get(botRoute[1] ?? '');
             const match = room && roomManager.getMatch(room.id);
@@ -131,7 +148,7 @@ const server = createServer((req, res) => {
         return;
     }
 
-    if (req.method === 'GET' && req.url === '/api/slow') {
+    if (config.nodeEnv !== 'production' && req.method === 'GET' && req.url === '/api/slow') {
         const start = performance.now();
 
         while (performance.now() - start < 300) {
@@ -185,15 +202,6 @@ const server = createServer((req, res) => {
         return;
     }
 
-
-    if (req.method === 'GET' && req.url === '/health') {
-        res.writeHead(200, {
-            'Content-Type': 'application/json; charset=utf-8',
-        });
-
-        res.end(JSON.stringify({ status: 'ok' }));
-        return;
-    }
 
     if (req.method === 'GET' && req.url === '/api/rooms') {
         res.writeHead(200, {
@@ -266,7 +274,7 @@ const server = createServer((req, res) => {
 
     res.end(JSON.stringify({ error: 'Not Found' }));
   })().catch((error:unknown) => {
-    console.error('HTTP request failed:', error);
+    logger.error({event:'http.failed',error:error instanceof Error?error.stack:String(error)});
     if (!res.headersSent) res.writeHead(500);
     if (!res.writableEnded) res.end('Internal Server Error');
   });
@@ -275,54 +283,47 @@ const server = createServer((req, res) => {
 const wss = createWebSocketServer(server, roomManager);
 
 server.listen(config.port, config.host, () => {
-    console.log(`Server running at http://${config.host}:${config.port}`);
+    logger.info({event:'server.listening',host:config.host,port:config.port,version:buildVersion});
 });
 
 let shuttingDown = false;
-
-function shutdown(signal: string): void {
-    if (shuttingDown) return;
-
-    shuttingDown = true;
-
-    roomManager.stopAll();
-
-    console.log(`Received ${signal}. Shutting down...`);
-
-    for (const socket of wss.clients) {
-        socket.terminate();
-    }
-
-    wss.close((wsError?: Error) => {
-        if (wsError) {
-            console.error('Error closing WebSocket server:', wsError);
-            process.exitCode = 1;
-        }
-
-        server.close((httpError) => {
-          void (async () => {
-            if (httpError) {
-                console.error('Error closing HTTP server:', httpError);
-                process.exitCode = 1;
-            }
-
-            try {
-                await closeEventLog();
-                console.log('Event log closed successfully.');
-            } catch (error) {
-                console.error('Error closing event log:', error);
-                process.exitCode = 1;
-            }
-
-            if (!httpError && !wsError) {
-                console.log('Server closed successfully.');
-            }
-          })().catch((error:unknown) => { console.error('Server cleanup failed:',error); process.exitCode=1; });
-        });
-
-        server.closeIdleConnections();
-    });
+let shutdownTimer:ReturnType<typeof setTimeout>|null=null;
+async function finishShutdown():Promise<void> {
+ try {await closeEventLog();logger.info({event:'server.logs_flushed'});}
+ catch(error){logger.error({event:'server.log_flush_failed',error:error instanceof Error?error.stack:String(error)});process.exitCode=1;}
+ if(shutdownTimer)clearTimeout(shutdownTimer);
+ logger.info({event:'server.stopped'});
 }
-
-process.on('SIGINT', () => shutdown('SIGINT'));
-process.on('SIGTERM', () => shutdown('SIGTERM'));
+function shutdown(signal:string):void {
+ if(shuttingDown)return;
+ shuttingDown=true;
+ logger.info({event:'server.shutdown',signal});
+ roomManager.stopAll();
+ shutdownTimer=setTimeout(()=>{logger.error({event:'server.shutdown_timeout'});process.exit(1);},9000);
+ shutdownTimer.unref();
+ for(const socket of wss.clients){
+  if(socket.readyState===1){
+   try {socket.send(JSON.stringify({v:0,type:'shutdown',message:'Server restarting. Reconnecting to lobby...'}));}
+   catch(error){logger.warn({event:'server.notify_failed',error:String(error)});}
+   socket.close(1001,'Server restarting');
+  } else socket.terminate();
+ }
+ const terminateTimer=setTimeout(()=>{for(const socket of wss.clients)socket.terminate();},2000);
+ terminateTimer.unref();
+ wss.close((wsError?:Error)=>{
+  if(wsError){logger.error({event:'ws.close_failed',error:wsError.stack});process.exitCode=1;}
+  server.close(httpError=>{
+   if(httpError){logger.error({event:'http.close_failed',error:httpError.stack});process.exitCode=1;}
+   void finishShutdown().catch(error=>{logger.error({event:'shutdown.failed',error:String(error)});process.exitCode=1;});
+  });
+  server.closeIdleConnections();
+ });
+}
+process.on('SIGINT',()=>shutdown('SIGINT'));
+process.on('SIGTERM',()=>shutdown('SIGTERM'));
+function fatal(event:string,error:unknown):void {
+ logger.fatal({event,error:error instanceof Error?error.stack:String(error)});
+ process.exit(1);
+}
+process.on('uncaughtException',error=>fatal('process.uncaught_exception',error));
+process.on('unhandledRejection',error=>fatal('process.unhandled_rejection',error));

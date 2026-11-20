@@ -1,78 +1,65 @@
-# Dogfight — JavaScript & TypeScript Practice Labs
-## Overview
-A browser multiplayer game built with TypeScript, Vite, Node.js, WebSockets, and HTML Canvas.
+# Dogfight — Multiplayer Space Arena
 
-Labs 01–05 established the JavaScript game and real-time networking. Lab 06 migrates the source to TypeScript with strict checking and runtime-validated protocol boundaries.
+A real-time multiplayer space shooter built with **TypeScript, HTML Canvas, WebSockets, Node.js and Vite**. Dogfight includes an authoritative server, deterministic shared physics, client-side prediction, interpolation, replay logging, diagnostics, and a production-oriented deployment setup.
 
-The project explores JavaScript fundamentals, the event loop, fixed-timestep simulation, object-oriented programming, composition, asynchronous operations, and game architecture.
+**Release:** v1.0.0 (source prepared) · **Public game URL:** not published · **Demo GIF/video:** not recorded
 
-## Features
-- Fixed-timestep game loop (60 updates per second).
+## How to play
 
-- Keyboard controls for ship rotation and thrust.
+Choose a player name and room, then fly with **↑** (thrust), **← / →** (turn), and **Space** (fire). The server simulates collisions and damage. The lobby, roster and chat allow multiple players to share a match. A network panel can inject latency, jitter and loss for experiments. The local player uses prediction and reconciliation; remote entities are interpolated between snapshots.
 
-- Ship movement with acceleration, drag and speed limit.
+## Architecture
 
-- Arena wrap-around.
-
-- Interpolated rendering.
-
-- DPR-aware and responsive Canvas.
-
-- HUD displaying FPS, frame duration and score.
-
-- Entity management and collision detection.
-
-- Asteroids, bullets, explosions and pickups.
-
-- Asynchronous asset loading with progress reporting.
-
-- Loading screen with cancellation and retry support.
-
-## Controls
-- **Arrow Up:** Thrust.
-
-- **Arrow Left:** Rotate left.
-
-- **Arrow Right:** Rotate right.
-
-- **Space:** Fire.
-
-
-## Project Structure
-
-```text
-dogfight/
-├── client/
-│   ├── src/
-│   │   ├── main.ts, loop.ts, netcode.ts, reconcile.ts
-│   │   ├── profiling.ts, frame-samples.ts
-│   │   ├── replay-worker.ts, worker-benchmark.ts
-│   │   ├── connection.ts, lobby.ts, audio.ts
-│   │   ├── assets/, render/
-│   │   └── ...
-│   ├── tests/
-│   └── public/
-├── server/
-│   ├── src/
-│   │   ├── index.ts, ws.ts, match.ts, room-manager.ts
-│   │   ├── bot.ts, token-bucket.ts, heartbeat.ts
-│   │   └── ...
-│   ├── scripts/
-│   │   ├── engine-bench.ts, simulation-benchmark.ts
-│   │   └── load-test.ts
-│   └── tests/
-├── shared/
-│   ├── sim/, codec/, tests/
-│   ├── protocol.ts
-│   └── types.ts
-├── e2e/two-players.spec.ts
-├── docs/lab04-m3-rss.png
-├── .github/workflows/ci.yml
-├── vitest.config.ts, playwright.config.ts
-├── eslint.config.mjs
-└── README.md
+```mermaid
+flowchart LR
+    C[Browser client — Vite / Canvas / PWA] <-->|HTTP API + WebSocket / binary or JSON| S[Node HTTP / ws server]
+    C --> L[Shared TypeScript simulation / protocol]
+    S --> L
+    S --> R[RoomManager / authoritative 30 Hz matches]
+    S --> O[JSON logs / metrics / health]
 ```
+
+The client and server share vector math, entities, deterministic simulation and Zod protocol definitions. Server-owned room state and players live in memory in **one running instance**. One instance avoids split-brain rooms; scaling later requires room-aware sticky routing or external room state (for example Redis pub/sub). Reverse proxies must support WebSocket Upgrade, `wss://` and idle timeouts longer than heartbeat intervals.
+
+## Local development
+
+```bash
+npm install
+npm run dev --workspace=server
+npm run dev --workspace=client
+```
+
+The server defaults to port **3000** and the Vite client to **5173**. The browser WebSocket connection automatically selects `ws://` or `wss://` according to the page's protocol.
+
+## Verification and measurements
+
+| Verification | Measured result |
+| --- | --- |
+| Unit/property tests (Lab 07, Windows) | 126 passed / 126 |
+| V8 coverage — statements / lines | 99.70% / 99.70% |
+| V8 coverage — functions / branches | 98.88% / 91.90% |
+| Playwright, two players (Lab 07, Windows) | 1 passed / 1 |
+| Deterministic Node hash (1,000 steps) | `04d96aea` |
+
+### Protocol benchmark (synthetic, four ships at 30 Hz)
+
+| Wire format | Bytes per snapshot | Downlink per client | Encode + decode |
+| --- | ---: | ---: | ---: |
+| JSON | 667 | 19.54 KiB/s | 5.32 µs |
+| Binary / `DataView` | 310 | 9.08 KiB/s | 6.12 µs |
+
+These figures were measured for Lab 05 on Node 22.16.0 and represent a controlled benchmark, not live Internet traffic. Binary was smaller, but JSON was slightly faster in that specific encode/decode measurement.
+
+### GC-oriented simulation microbenchmark (Lab 07, Node 22.16.0)
+
+| Ship update implementation | Median | p95 | p99 |
+| --- | ---: | ---: | ---: |
+| Allocating vectors | 17.61 ms | 18.64 ms | 19.12 ms |
+| Reusing vectors | 14.94 ms | 16.82 ms | 17.28 ms |
+
+100,000 ship updates per run, after warm-up. **Load-test capacity and real-world RTT are not measured**; the 8/32/64/128-client runner does not establish capacity without accepted-connection counts and latency/tick metrics. No remote two-player demonstration or production uptime data is available.
+
+## Laboratory implementation notes — Labs 01–08
 
 ## Lab 01 — JavaScript Fundamentals
 ### Overview
@@ -622,6 +609,8 @@ Promises, async/await and queueMicrotask use the microtask queue, while setTimeo
 
 Understanding this execution order is important when working with asynchronous operations, animations and game loops.
 
+## Lab 04 — Node.js, Streams and Server Hardening
+
 ### M3 — Streams and Backpressure
 
 A synthetic 200 MiB NDJSON file was streamed through the replay endpoint using a download rate limit of 5 MiB/s.
@@ -912,3 +901,52 @@ npm run test:e2e
 npm run bench:engine
 npm run bench:load
 ```
+
+## Lab 08 — Production and launch
+
+### M1 — Production-ready Node process
+
+- Zod validates `PORT`, `HOST`, `NODE_ENV`, `LOG_LEVEL`, `ALLOWED_ORIGINS`, `MAX_CONNECTIONS_PER_IP`, `MAX_ROOMS` and `MAX_PLAYERS_PER_ROOM` at startup. The default bind host is `0.0.0.0` and `.env.example` documents configuration.
+- `SIGINT`/`SIGTERM` stop match scheduling, send a versioned `shutdown` control message, close WebSockets with **1001**, stop accepting HTTP connections, wait for event-log streams and finish within a 9-second timeout.
+- `GET /health` returns process liveness and the build SHA, and `GET /ready` reports 503 during shutdown. `GET /metrics` exposes a JSON snapshot with connected players, rooms, messages/s, bytes/s, authoritative tick p99, event-loop utilization, RSS bytes and rejection counts by reason.
+- `pino` sends structured JSON logs to stdout, with event names and safe room/player IDs. Uncaught exceptions and unhandled rejections are logged and terminate the process with a failure status.
+- The build revision is displayed beside the Dogfight title and in `/health` via `VITE_BUILD_SHA` and `BUILD_SHA`.
+
+### M2 — WebSocket hardening
+
+- Handshakes verify the request's `Origin` against `ALLOWED_ORIGINS` and enforce a per-IP connection cap. The IP is taken from the socket address instead of trusting an arbitrary forwarded header.
+- The existing 4 KiB frame cap, input/general token buckets, 5-second join timeout, 15-second heartbeat, slow-client buffered-amount policy and max-room/player limits remain active.
+- Malformed frames, rate-limit breaches and heartbeat failures are logged and counted. A staging-only chaos runner (`server/scripts/chaos-test.ts`) exercises origin rejection, a connection cap, a malformed-frame flood, surviving rooms and shutdown; live-load isolation measurements are not yet recorded. During controlled shutdown, the client displays a restart message and reloads to the lobby. Its normal transport already retries unexpected disconnects with exponential backoff.
+- The intentionally blocking `/api/slow` diagnostic and the bot-creation endpoint are disabled in production.
+
+### M3 — Container and delivery
+
+- Multi-stage `Dockerfile`: installs the workspace, builds the Vite client and bundled JavaScript server, then starts a smaller Alpine Node image as the non-root `node` user with production dependencies only.
+- Container runtime sets `NODE_ENV=production`, invokes **`node server/dist/index.js`** (exec-form `CMD`), and supplies a `/health` `HEALTHCHECK`. `.dockerignore` filters source control, dependencies, build artifacts and secrets; `compose.yaml` provides a single-instance deployment.
+- GitHub Actions checks each push via the existing CI workflow. Tags matching `v*` trigger release checks, container build and push to GHCR; a deployment hook runs when its repository secret is configured.
+- Container image size, real Docker `SIGTERM` handling, externally reachable `wss://` and live URL **have not been measured/verified**.
+
+### M4 — PWA and product finish
+
+- A web manifest, 192/512 px icons and service worker provide install metadata and an offline-cached entry shell. Multiplayer remains online-only; API and monitoring endpoints are never service-worker cached.
+- The project contains the game controls, architectural overview, protocol measurements, GC measurements, operational architecture, limitations and future steps. A live Internet deployment, remote-user RTT measurements, external uptime monitor, installed-phone verification, gameplay GIF and demo video are not yet available.
+
+### Known limitations
+
+| Limitation | Reason |
+| --- | --- |
+| Single server instance | Rooms, players and matches are stored in process memory |
+| Network interpolation adds visible delay | Remote entities intentionally render from buffered snapshots |
+| No server-side lag compensation | Hit detection uses authoritative current-tick positions |
+| A public origin allowlist is mandatory | Unrestricted cross-site WebSocket handshakes would expose rooms to third-party pages |
+| Offline multiplayer is unavailable | PWA assets can be cached, but gameplay requires a live server |
+
+### What I'd do next
+
+Introduce room-aware sticky sessions or Redis pub/sub to support multiple instances, lag compensation for hit registration, authenticated player accounts, matchmaking, a separately monitored public service and a browser-visible match dashboard.
+
+### Version history
+
+Development milestones: `lab-01` · `lab-02` · `lab-03` · `lab-04` · `lab-05` · `lab-06` · `lab-07` · `lab-08` · `v1.0.0`. These are intended source milestones; creation of the final tags and release on GitHub is not asserted here.
+
+---

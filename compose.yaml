@@ -1,0 +1,21 @@
+services:
+  dogfight:
+    build:
+      context: .
+      args:
+        BUILD_SHA: ${BUILD_SHA:-development}
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: 3000
+      LOG_LEVEL: info
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000}
+      MAX_CONNECTIONS_PER_IP: 8
+      MAX_ROOMS: 10
+      MAX_PLAYERS_PER_ROOM: 8
+      BUILD_SHA: ${BUILD_SHA:-development}
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 10s

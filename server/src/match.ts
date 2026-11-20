@@ -1,3 +1,4 @@
+import {config} from './config.ts';
 import { Asteroid } from '@dogfight/shared/sim/asteroid';
 import { Vector2 } from '@dogfight/shared/sim/vector';
 import { Pickup } from '@dogfight/shared/sim/pickup';
@@ -49,7 +50,7 @@ export class Match {
  }
  addBots(count:number):number {
   if(!Number.isInteger(count)||count<1||count>8)throw new RangeError('Bot count must be between 1 and 8');
-  if(this.room.players.size+count>8)throw new RangeError('Room capacity exceeded');
+  if(this.room.players.size+count>config.maxPlayersPerRoom)throw new RangeError('Room capacity exceeded');
   for(let i=0;i<count;i++){
    const player={id:`bot-${randomUUID()}`,name:`Bot ${this.bots.size+1}`};
    this.room.join(player);this.addPlayer(player);this.bots.set(player.id,new Bot(player.id));

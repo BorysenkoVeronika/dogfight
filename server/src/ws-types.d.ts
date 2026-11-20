@@ -4,7 +4,7 @@ declare module 'ws' {
  export type RawData = Buffer;
  export class WebSocket {
   static readonly OPEN: number;
-  constructor(address:string);
+  constructor(address:string,options?:{origin?:string});
   once(event:'open'|'error'|'close',listener:()=>void):this;
   readonly bufferedAmount: number;
   readonly readyState: number;
@@ -18,7 +18,7 @@ declare module 'ws' {
   ping():void;
  }
  export class WebSocketServer {
-  constructor(options:{server:HttpServer;path:string;maxPayload:number});
+  constructor(options:{server:HttpServer;path:string;maxPayload:number;verifyClient?:(info:{origin:string|undefined;req:IncomingMessage},done:(accepted:boolean,code?:number,reason?:string)=>void)=>void});
   readonly clients:Set<WebSocket>;
   on(event:'connection',listener:(socket:WebSocket, request:IncomingMessage)=>void):this;
   on(event:'close',listener:()=>void):this;

@@ -7,6 +7,7 @@ type ConnectionEvents={
  open:{type:'open'};
  close:{type:'close';code:number};
  failed:{type:'failed';code:number};
+ shutdown:{type:'shutdown';message:string};
  roster:Extract<ServerMessage,{type:'roster'}>;
  chat:Extract<ServerMessage,{type:'chat'}>;
  pong:Extract<ServerMessage,{type:'pong'}>;
@@ -59,6 +60,7 @@ export function createConnection():Connection{
      case 'roster':dispatch('roster',data);break;
      case 'chat':dispatch('chat',data);break;
      case 'pong':dispatch('pong',data);break;
+     case 'shutdown':dispatch('shutdown',data);break;
      case 'snapshot':dispatch('snapshot',data);break;
      default:assertNever(data);
     }

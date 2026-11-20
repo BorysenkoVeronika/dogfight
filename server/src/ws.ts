@@ -1,4 +1,6 @@
 import { WebSocketServer } from 'ws';
+import {config} from './config.ts';
+import {logger,recordIncoming,recordOutgoing,rejectConnection} from './observability.ts';
 import type {WebSocket} from 'ws';
 import type {Server} from 'node:http';
 import {randomUUID} from 'node:crypto';
@@ -14,16 +16,28 @@ import type {RoomManager} from './room-manager.ts';
 
 const PROTOCOL_VERSION=0;
 const MAX_BUFFERED_BYTES=64*1024;
-const MAX_PLAYERS_PER_ROOM=8;
+
 type NetworkConfig={latency:number;jitter:number;drop:number};
 type Session={player:Player|null;room:Room|null;codec:'json'|'binary';networkConfig:NetworkConfig;networkTimers:Set<ReturnType<typeof setTimeout>>;generalBucket:TokenBucket;inputBucket:TokenBucket;heartbeat:Heartbeat;joinTimeout:ReturnType<typeof setTimeout>};
 export function createWebSocketServer(server:Server,roomManager:RoomManager):WebSocketServer {
- const wss=new WebSocketServer({server,path:'/ws',maxPayload:4096});
+ const connectionsByIp=new Map<string,number>();
+ const socketIp=new WeakMap<WebSocket,string>();
+ const allowedOrigins=new Set(config.allowedOrigins);
+ const wss=new WebSocketServer({server,path:'/ws',maxPayload:4096,
+  verifyClient:(info,done)=>{
+   const origin=info.origin;
+   const ip=info.req.socket.remoteAddress ?? 'unknown';
+   if(!origin || !allowedOrigins.has(origin)){rejectConnection('origin');done(false,403,'Origin not allowed');return;}
+   if((connectionsByIp.get(ip)??0)>=config.maxConnectionsPerIp){rejectConnection('ip_limit');done(false,429,'Too many connections');return;}
+   // Reserve the slot before the asynchronous connection callback.
+   connectionsByIp.set(ip,(connectionsByIp.get(ip)??0)+1);
+   done(true);
+  }});
  const states=new WeakMap<WebSocket,Session>();
  function send(socket:WebSocket,payload:string|ArrayBuffer,critical=false):void{
   if(socket.readyState!==1)return;
   if(socket.bufferedAmount>MAX_BUFFERED_BYTES){if(critical)socket.close(1008,'Slow client');return;}
-  socket.send(payload);
+  socket.send(payload);recordOutgoing(typeof payload==='string'?Buffer.byteLength(payload):payload.byteLength);
  }
  function network(socket:WebSocket,action:()=>void):void{
   const state=states.get(socket);if(!state)return;
@@ -49,27 +63,29 @@ export function createWebSocketServer(server:Server,roomManager:RoomManager):Web
   }
  };
  wss.on('connection',(socket,request)=>{
+  socketIp.set(socket,request.socket.remoteAddress ?? 'unknown');
   const session:Session={player:null,room:null,codec:new URL(request.url??'/', 'http://localhost').searchParams.get('codec')==='json'?'json':'binary',networkConfig:{latency:0,jitter:0,drop:0},networkTimers:new Set(),generalBucket:new TokenBucket(10,10),inputBucket:new TokenBucket(40,40),heartbeat:new Heartbeat(),joinTimeout:setTimeout(()=>{if(!session.room)socket.close(1008,'Join timeout');},5000)};
   states.set(socket,session);
   function consumeToken(input:boolean):boolean { return (input ? session.inputBucket : session.generalBucket).consume(); }
   socket.on('pong',()=>{session.heartbeat.pong();});
-  socket.on('error',error=>console.error('WebSocket error:',error));
+  socket.on('error',error=>logger.warn({event:'ws.error',error:error.message}));
   socket.on('message',(raw,isBinary)=>{
+   recordIncoming(raw.length);
    let candidate:unknown;
    try{
     if(isBinary){if(session.codec!=='binary')throw new Error('Unexpected binary packet');candidate={v:0,...decodeInput(raw)};}
     else candidate=JSON.parse(raw.toString());
-   }catch(error){console.warn('Malformed websocket payload',error);socket.close(isBinary?1008:1007,'Invalid message');return;}
+   }catch(error){logger.warn({event:'ws.invalid_payload',reason:error instanceof Error?error.message:'invalid'});rejectConnection('invalid_payload');socket.close(isBinary?1008:1007,'Invalid message');return;}
    const parsed=parseClientMessage(candidate);
-   if(!parsed.ok){console.warn('Invalid message:',parsed.error);socket.close(1008,'Invalid message');return;}
+   if(!parsed.ok){logger.warn({event:'ws.invalid_message',reason:parsed.error});rejectConnection('invalid_message');socket.close(1008,'Invalid message');return;}
    const data:ClientMessage=parsed.value;
-   if(!consumeToken(data.type==='input')){socket.close(1008,'Rate limit exceeded');return;}
+   if(!consumeToken(data.type==='input')){rejectConnection('rate_limit');socket.close(1008,'Rate limit exceeded');return;}
    switch(data.type){
     case 'join':{
      if(session.room){socket.close(1008,'Already joined');return;}
      const room=roomManager.get(data.roomId);
      if(!room){socket.close(1008,'Room not found');return;}
-     if(room.players.size>=MAX_PLAYERS_PER_ROOM){socket.close(1008,'Room full');return;}
+     if(room.players.size>=config.maxPlayersPerRoom){socket.close(1008,'Room full');return;}
      const player={id:randomUUID(),name:data.playerName.trim()};
      session.room=room;session.player=player;
      room.join(player);roomManager.getMatch(room.id)?.addPlayer(player);
@@ -100,6 +116,7 @@ export function createWebSocketServer(server:Server,roomManager:RoomManager):Web
    }
   });
   socket.on('close',()=>{
+   const ip=socketIp.get(socket);if(ip){const count=(connectionsByIp.get(ip)??1)-1;if(count>0)connectionsByIp.set(ip,count);else connectionsByIp.delete(ip);}
    clearTimeout(session.joinTimeout);
    for(const timer of session.networkTimers)clearTimeout(timer);
    session.networkTimers.clear();
@@ -115,7 +132,7 @@ export function createWebSocketServer(server:Server,roomManager:RoomManager):Web
   for(const socket of wss.clients){
    const state=states.get(socket);
    if(!state || socket.readyState!==1)continue;
-   if(!state.heartbeat.ping()){socket.terminate();continue;}
+   if(!state.heartbeat.ping()){rejectConnection('heartbeat');socket.terminate();continue;}
    socket.ping();
   }
  },15000);

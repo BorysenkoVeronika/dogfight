@@ -31,6 +31,7 @@ export const ServerMessageSchema = z.discriminatedUnion('type',[
  z.object({v:version,type:z.literal('roster'),players:z.array(player)}),
  z.object({v:version,type:z.literal('chat'),playerId:z.string(),playerName:z.string(),message:z.string()}),
  z.object({v:version,type:z.literal('pong'),sentAt:z.number().finite()}),
+ z.object({v:version,type:z.literal('shutdown'),message:z.string()}),
  z.object({v:version,type:z.literal('snapshot'),tick:count,lastProcessedSeq:z.number().int(),playerId:z.string(),seed:count,entities:z.array(EntitySchema),events,score:z.number().optional()})
 ]);
 export type ServerMessage = z.infer<typeof ServerMessageSchema>;
